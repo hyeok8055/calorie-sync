@@ -1,0 +1,9 @@
+.modern-search-input:hover {
+  border-color: #5FDD9D !important;
+  box-shadow: 0 4px 12px rgba(95, 221, 157, 0.15) !important;
+}
+
+.modern-search-input:focus {
+  border-color: #5FDD9D !important;
+  box-shadow: 0 4px 16px rgba(95, 221, 157, 0.25) !important;
+}

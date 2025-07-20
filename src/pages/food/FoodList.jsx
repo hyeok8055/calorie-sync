@@ -1,17 +1,17 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Typography, Input, Row, Col, Button, Spin, List, Empty } from 'antd';
 import Fuse from "fuse.js";
 import { useParams, useNavigate } from "react-router-dom";
-import { CheckCircleTwoTone, PlusOutlined, MinusCircleOutlined, SearchOutlined } from '@ant-design/icons';
+import { PlusOutlined, MinusCircleOutlined, SearchOutlined } from '@ant-design/icons';
 import { realtimeDb } from '../../firebaseconfig';
 import { ref, set, onValue, get } from "firebase/database";
 import { useSelector, useDispatch } from 'react-redux';
 import { setFoods } from '../../redux/actions/foodActions';
 import { auth } from '../../firebaseconfig';
 import { searchFoodNutrition as fetchFoodNutrition } from '../../api/api';
+import '../../styles/FoodList.css';
 
 const { Text } = Typography;
-const { Search } = Input;
 
 // 관리자 접근 가능한 이메일 목록
 const ADMIN_EMAILS = [
@@ -186,16 +186,16 @@ const Meal = () => {
         
         // 캐시가 30일 이내인지 확인
         if (now - cacheTime < CACHE_EXPIRY_TIME) {
-          console.log('캐시된 검색 결과 사용:', searchQuery);
+          // console.log('캐시된 검색 결과 사용:', searchQuery);
           return cachedData.results;
         } else {
-          console.log('캐시 만료, 새로운 검색 실행:', searchQuery);
+          // console.log('캐시 만료, 새로운 검색 실행:', searchQuery);
           return null;
         }
       }
       return null;
     } catch (error) {
-      console.error('캐시 조회 실패:', error);
+      // console.error('캐시 조회 실패:', error);
       return null;
     }
   };
@@ -213,9 +213,9 @@ const Meal = () => {
       };
       
       await set(cacheRef, cacheData);
-      console.log('검색 결과 캐시 저장 완료:', searchQuery);
+      // console.log('검색 결과 캐시 저장 완료:', searchQuery);
     } catch (error) {
-      console.error('캐시 저장 실패:', error);
+      // console.error('캐시 저장 실패:', error);
     }
   };
 
@@ -239,10 +239,10 @@ const Meal = () => {
         // 캐시된 결과가 있으면 사용
         setFoodSearchResults(cachedResults);
         setShowApiResults(true);
-        console.log('캐시된 검색 결과 사용됨');
+        // console.log('캐시된 검색 결과 사용됨');
       } else {
         // 2단계: 캐시된 결과가 없거나 만료된 경우 API 호출
-        console.log('API 검색 실행:', searchQuery);
+        // console.log('API 검색 실행:', searchQuery);
         const result = await fetchFoodNutrition(searchQuery);
         
         if (result && result.items && result.items.length > 0) {
@@ -449,18 +449,6 @@ const Meal = () => {
               🍽️
             </div>
           </div>
-          
-          {/* 현대적인 스타일을 위한 CSS */}
-          <style jsx>{`
-            .modern-search-input:hover {
-              border-color: #5FDD9D !important;
-              box-shadow: 0 4px 12px rgba(95, 221, 157, 0.15) !important;
-            }
-            .modern-search-input:focus {
-              border-color: #5FDD9D !important;
-              box-shadow: 0 4px 16px rgba(95, 221, 157, 0.25) !important;
-            }
-          `}</style>
         </Col>
       </Row>
       

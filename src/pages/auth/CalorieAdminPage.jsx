@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Typography, Input, Row, Col, Button, Modal, Form, Table, InputNumber, message, Select, Card, Tabs, Tag, Space, Tooltip, Divider, Switch, ColorPicker, Transfer, Skeleton, Empty, DatePicker } from 'antd';
+import { Typography, Input, Row, Col, Button, Modal, Form, Table, InputNumber, message, Select, Card, Tabs, Tag, Space, Tooltip, Divider, Switch, ColorPicker, Transfer, Skeleton, Empty, DatePicker, Slider, Radio, Popover, Steps, Alert } from 'antd';
 import { db } from '../../firebaseconfig';
 import { collection, getDocs, doc, getDoc, updateDoc, setDoc, query, where, addDoc, deleteDoc, Timestamp, writeBatch } from 'firebase/firestore';
 import { useSelector } from 'react-redux';
 import { useNavigate } from "react-router-dom";
 import { useMediaQuery } from 'react-responsive';
-import { SyncOutlined, ExclamationCircleOutlined, UserOutlined, TeamOutlined, EditOutlined, SaveOutlined, UndoOutlined, PlusOutlined, DeleteOutlined, UserAddOutlined, CalendarOutlined, CoffeeOutlined } from '@ant-design/icons';
+import { SyncOutlined, ExclamationCircleOutlined, UserOutlined, TeamOutlined, EditOutlined, SaveOutlined, UndoOutlined, PlusOutlined, DeleteOutlined, UserAddOutlined, CalendarOutlined, CoffeeOutlined, InfoCircleOutlined, QuestionCircleOutlined } from '@ant-design/icons';
+import { Shuffle } from 'lucide-react';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 dayjs.locale('ko');
@@ -51,13 +52,19 @@ const CalorieAdminPage = () => {
   const [isGroupEditModalVisible, setIsGroupEditModalVisible] = useState(false);
   const [isUserModalVisible, setIsUserModalVisible] = useState(false);
   const [isAddUserModalVisible, setIsAddUserModalVisible] = useState(false);
+  const [isRandomUserModalVisible, setIsRandomUserModalVisible] = useState(false);
   const [targetGroupForAddingUser, setTargetGroupForAddingUser] = useState(null);
   const [targetKeysForTransfer, setTargetKeysForTransfer] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [editingGroup, setEditingGroup] = useState(null);
+  const [randomUserCount, setRandomUserCount] = useState(5);
+  const [randomUserPercentage, setRandomUserPercentage] = useState(50);
+  const [randomSelectionMode, setRandomSelectionMode] = useState('count');
+  const [randomSelectedUsers, setRandomSelectedUsers] = useState([]);
   const [form] = Form.useForm();
   const [groupSettingsForm] = Form.useForm();
   const [groupEditForm] = Form.useForm();
+  const [randomUserForm] = Form.useForm();
   const user = useSelector((state) => state.auth.user);
   const navigate = useNavigate();
   
@@ -67,6 +74,9 @@ const CalorieAdminPage = () => {
   // 날짜 및 식사 유형 상태 추가
   const [selectedDate, setSelectedDate] = useState(dayjs()); // 오늘 날짜로 초기화 (dayjs 객체)
   const [selectedMealType, setSelectedMealType] = useState('breakfast'); // 기본값: 아침
+  
+  // 도움말 상태
+  const [showHelp, setShowHelp] = useState(false);
 
   // 권한 체크
   useEffect(() => {
@@ -382,6 +392,84 @@ const CalorieAdminPage = () => {
     setTargetKeysForTransfer([]);
     setIsAddUserModalVisible(true);
   };
+  
+  // 랜덤 사용자 선택 모달
+  const handleOpenRandomUserModal = (group) => {
+    setTargetGroupForAddingUser(group);
+    setRandomUserCount(5); // 기본값 설정
+    setRandomUserPercentage(50); // 기본값 설정
+    setRandomSelectionMode('count'); // 기본 모드 설정
+    setRandomSelectedUsers([]);
+    setIsRandomUserModalVisible(true);
+  };
+  
+  // 랜덤 사용자 선택 함수
+  const handleRandomUserSelection = () => {
+    const availableUsers = users.filter(user => {
+      if (targetGroupForAddingUser.isDefault) {
+        return user.group !== DEFAULT_GROUP_VALUE;
+      } else {
+        return user.group !== targetGroupForAddingUser.name;
+      }
+    });
+    
+    if (availableUsers.length === 0) {
+      message.warning('선택 가능한 사용자가 없습니다.');
+      return;
+    }
+    
+    let selectedCount = 0;
+    if (randomSelectionMode === 'count') {
+      selectedCount = Math.min(randomUserCount, availableUsers.length);
+    } else { // percentage 모드
+      selectedCount = Math.floor(availableUsers.length * (randomUserPercentage / 100));
+      selectedCount = Math.max(1, selectedCount); // 최소 1명 이상
+      selectedCount = Math.min(selectedCount, availableUsers.length); // 최대 전체 인원
+    }
+    
+    // Fisher-Yates 셔플 알고리즘으로 랜덤 선택
+    const shuffled = [...availableUsers];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    
+    const selected = shuffled.slice(0, selectedCount);
+    setRandomSelectedUsers(selected);
+    setTargetKeysForTransfer(selected.map(user => user.key));
+  };
+  
+  // 랜덤 선택된 사용자를 그룹에 추가
+  const handleAddRandomUsersToGroup = async () => {
+    if (!targetGroupForAddingUser || targetKeysForTransfer.length === 0) {
+      message.warning('추가할 사용자를 선택하세요.');
+      return;
+    }
+    
+    const targetGroupValue = targetGroupForAddingUser.isDefault
+      ? DEFAULT_GROUP_VALUE
+      : targetGroupForAddingUser.name;
+      
+    try {
+      setLoadingUsers(true);
+      const batch = writeBatch(db);
+      targetKeysForTransfer.forEach(userKey => {
+        const userRef = doc(db, 'users', userKey);
+        batch.update(userRef, { group: targetGroupValue });
+      });
+      await batch.commit();
+      message.success(`${targetKeysForTransfer.length}명의 사용자가 '${targetGroupForAddingUser.name}' 그룹에 추가되었습니다.`);
+      setIsRandomUserModalVisible(false);
+      setTargetGroupForAddingUser(null);
+      setRandomSelectedUsers([]);
+      await loadData();
+    } catch (error) {
+      console.error('그룹에 사용자 추가 실패:', error);
+      message.error('그룹에 사용자를 추가하는 중 오류가 발생했습니다.');
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
 
   // Transfer 데이터 소스 준비 (모든 사용자 중 현재 그룹 제외)
   const getTransferDataSource = () => {
@@ -484,6 +572,7 @@ const CalorieAdminPage = () => {
                          icon={<EditOutlined />}
                          size="small"
                          onClick={() => handleOpenGroupEditModal(group)}
+                         title="그룹 정보 수정"
                      >
                          정보 수정
                      </Button>
@@ -492,16 +581,46 @@ const CalorieAdminPage = () => {
                          icon={<DeleteOutlined />}
                          size="small"
                          onClick={() => handleDeleteGroup(group)}
+                         title="그룹 삭제"
                      >
                          그룹 삭제
                      </Button>
-                     <Button
+                     <Popover
+                       content={
+                         <div style={{ width: 200 }}>
+                           <Button 
+                             icon={<UserAddOutlined />} 
+                             block 
+                             style={{ marginBottom: 8 }}
+                             onClick={() => {
+                               handleOpenAddUserModal(group);
+                             }}
+                           >
+                             수동 선택
+                           </Button>
+                           <Button 
+                             icon={<Shuffle size={16} />} 
+                             block
+                             onClick={() => {
+                               handleOpenRandomUserModal(group);
+                             }}
+                           >
+                             랜덤 추출
+                           </Button>
+                         </div>
+                       }
+                       title="사용자 추가 방법"
+                       trigger="click"
+                       placement="bottom"
+                     >
+                       <Button
                          icon={<UserAddOutlined />}
                          size="small"
-                         onClick={() => handleOpenAddUserModal(group)}
-                     >
+                         title="사용자 추가"
+                       >
                          사용자 추가
-                     </Button>
+                       </Button>
+                     </Popover>
                      <Divider type="vertical" />
                  </>
              )}
@@ -510,6 +629,7 @@ const CalorieAdminPage = () => {
               icon={<EditOutlined />}
               size="small"
               onClick={() => handleOpenGroupSettingsModal(group.name)}
+              title="그룹 칼로리 편차 설정"
             >
               편차 설정
             </Button>
@@ -525,6 +645,7 @@ const CalorieAdminPage = () => {
                   onOk() { applyGroupCalorieBias(group.name); }
                 });
               }}
+              title="그룹 전체 사용자에게 편차 적용"
             >
               편차 적용
             </Button>
@@ -864,9 +985,38 @@ const CalorieAdminPage = () => {
   return (
     <div style={{ padding: isMobile ? '8px' : '20px' }}>
       <Row justify="space-between" align="middle" style={{ marginBottom: 16, padding: isMobile ? '0 8px' : 0 }}>
-        <Title level={isMobile ? 4 : 2} style={{ color: '#5FDD9D', margin: 0 }}>칼로리 편차 관리</Title>
+        <Space>
+          <Title level={isMobile ? 4 : 2} style={{ color: '#5FDD9D', margin: 0 }}>칼로리 편차 관리</Title>
+          <Tooltip title="도움말 보기">
+            <Button 
+              type="text" 
+              shape="circle" 
+              icon={<QuestionCircleOutlined />} 
+              onClick={() => setShowHelp(!showHelp)}
+            />
+          </Tooltip>
+        </Space>
         <Button onClick={loadData} icon={<SyncOutlined />} loading={loadingGroups || loadingUsers}>새로고침</Button>
       </Row>
+      
+      {showHelp && (
+        <Alert
+          message="칼로리 편차 관리 도움말"
+          description={
+            <div>
+              <p><strong>그룹 관리</strong>: 사용자들을 그룹으로 관리하고 그룹별 칼로리 편차를 설정할 수 있습니다.</p>
+              <p><strong>편차 설정</strong>: 그룹 또는 개별 사용자의 칼로리 편차를 설정합니다.</p>
+              <p><strong>편차 적용</strong>: 설정된 편차를 선택한 날짜와 식사 유형에 적용합니다.</p>
+              <p><strong>랜덤 추출</strong>: 사용자를 랜덤하게 선택하여 그룹에 추가할 수 있습니다.</p>
+            </div>
+          }
+          type="info"
+          showIcon
+          closable
+          style={{ marginBottom: 16 }}
+          onClose={() => setShowHelp(false)}
+        />
+      )}
 
       <Row gutter={[8, 16]} align="middle" style={{ marginBottom: 20, padding: isMobile ? '0 8px' : 0 }}>
         <Col xs={12} sm={8} md={6}>
@@ -906,7 +1056,12 @@ const CalorieAdminPage = () => {
       >
         <TabPane tab={<span><TeamOutlined /> 그룹 관리</span>} key="groups">
           <Row justify="space-between" align="middle" style={{ marginBottom: 16, padding: isMobile ? '0 8px' : 0 }}>
-            <Text style={{ fontSize: isMobile ? '14px' : '16px' }}>그룹별 설정 및 편차 관리</Text>
+            <Space>
+              <Text style={{ fontSize: isMobile ? '14px' : '16px' }}>그룹별 설정 및 편차 관리</Text>
+              <Tooltip title="그룹을 생성하고 사용자를 그룹에 할당하여 칼로리 편차를 관리할 수 있습니다.">
+                <InfoCircleOutlined style={{ color: '#1677ff' }} />
+              </Tooltip>
+            </Space>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => handleOpenGroupEditModal()} size={isMobile ? 'small' : 'middle'}>새 그룹</Button>
           </Row>
           {loadingGroups ? (
@@ -1015,9 +1170,157 @@ const CalorieAdminPage = () => {
        <Modal title={<Text style={{ fontSize: '16px', fontWeight: '600' }}>'{targetGroupForAddingUser?.name}' 그룹 사용자 추가</Text>} open={isAddUserModalVisible} onCancel={() => setIsAddUserModalVisible(false)} onOk={handleAddUsersToGroup} okText="추가" cancelText="취소" width={isMobile ? '95%' : 680} destroyOnClose bodyStyle={{ height: isMobile ? '50vh' : 350, overflowY: 'auto' }}>
             {targetGroupForAddingUser && ( <Transfer dataSource={getTransferDataSource()} showSearch filterOption={(i, o) => o.title.toLowerCase().includes(i.toLowerCase())} targetKeys={targetKeysForTransfer} onChange={handleTransferChange} render={item => item.title} listStyle={{ width: isMobile ? '45%' : 280, height: isMobile ? 280 : 300 }} titles={['전체', '추가']} locale={{ itemUnit: '명', itemsUnit: '명', searchPlaceholder: '검색' }}/> )}
         </Modal>
+        
+        <Modal 
+          title={
+            <Space>
+              <Shuffle size={16} />
+              <Text style={{ fontSize: '16px', fontWeight: '600' }}>'{targetGroupForAddingUser?.name}' 그룹 랜덤 사용자 추가</Text>
+            </Space>
+          } 
+          open={isRandomUserModalVisible} 
+          onCancel={() => setIsRandomUserModalVisible(false)} 
+          onOk={handleAddRandomUsersToGroup} 
+          okText="선택한 사용자 추가" 
+          cancelText="취소" 
+          width={isMobile ? '95%' : 680} 
+          destroyOnClose 
+          bodyStyle={{ maxHeight: isMobile ? '70vh' : '70vh', overflowY: 'auto' }}
+        >
+          {targetGroupForAddingUser && (
+            <div>
+              <Steps
+                current={randomSelectedUsers.length > 0 ? 1 : 0}
+                items={[
+                  {
+                    title: '랜덤 설정',
+                    description: '추출 방식 선택',
+                  },
+                  {
+                    title: '사용자 확인',
+                    description: '추출된 사용자 확인',
+                  },
+                ]}
+                style={{ marginBottom: 24 }}
+              />
+              
+              <Form form={randomUserForm} layout="vertical">
+                <Form.Item label="랜덤 추출 방식">
+                  <Radio.Group 
+                    value={randomSelectionMode} 
+                    onChange={(e) => setRandomSelectionMode(e.target.value)}
+                    buttonStyle="solid"
+                  >
+                    <Radio.Button value="count">인원수 기준</Radio.Button>
+                    <Radio.Button value="percentage">비율 기준</Radio.Button>
+                  </Radio.Group>
+                </Form.Item>
+                
+                {randomSelectionMode === 'count' ? (
+                  <Form.Item label={`추출할 인원수 (최대 ${getTransferDataSource().length}명)`}>
+                    <Row gutter={16}>
+                      <Col span={16}>
+                        <Slider
+                          min={1}
+                          max={Math.max(1, getTransferDataSource().length)}
+                          value={randomUserCount}
+                          onChange={setRandomUserCount}
+                        />
+                      </Col>
+                      <Col span={8}>
+                        <InputNumber
+                          min={1}
+                          max={Math.max(1, getTransferDataSource().length)}
+                          value={randomUserCount}
+                          onChange={setRandomUserCount}
+                          style={{ width: '100%' }}
+                          addonAfter="명"
+                        />
+                      </Col>
+                    </Row>
+                  </Form.Item>
+                ) : (
+                  <Form.Item label="전체 사용자 중 추출 비율 (%)">
+                    <Row gutter={16}>
+                      <Col span={16}>
+                        <Slider
+                          min={1}
+                          max={100}
+                          value={randomUserPercentage}
+                          onChange={setRandomUserPercentage}
+                        />
+                      </Col>
+                      <Col span={8}>
+                        <InputNumber
+                          min={1}
+                          max={100}
+                          value={randomUserPercentage}
+                          onChange={setRandomUserPercentage}
+                          style={{ width: '100%' }}
+                          addonAfter="%"
+                        />
+                      </Col>
+                    </Row>
+                  </Form.Item>
+                )}
+                
+                <Form.Item>
+                  <Button 
+                    type="primary" 
+                    icon={<Shuffle size={16} />} 
+                    onClick={handleRandomUserSelection}
+                    disabled={getTransferDataSource().length === 0}
+                  >
+                    랜덤 추출하기
+                  </Button>
+                </Form.Item>
+              </Form>
+              
+              {randomSelectedUsers.length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <Alert
+                    message={`${randomSelectedUsers.length}명의 사용자가 랜덤으로 선택되었습니다.`}
+                    type="success"
+                    showIcon
+                    style={{ marginBottom: 16 }}
+                  />
+                  
+                  <Table
+                    dataSource={randomSelectedUsers}
+                    rowKey="key"
+                    size="small"
+                    pagination={false}
+                    columns={[
+                      {
+                        title: '이름',
+                        dataIndex: 'name',
+                        key: 'name',
+                      },
+                      {
+                        title: '이메일',
+                        dataIndex: 'email',
+                        key: 'email',
+                      },
+                      {
+                        title: '현재 그룹',
+                        key: 'group',
+                        render: (_, record) => {
+                          const currentGroupName = record.group === DEFAULT_GROUP_VALUE
+                            ? '기본 그룹'
+                            : (groups.find(g => g.name === record.group)?.name || record.group);
+                          return currentGroupName;
+                        }
+                      }
+                    ]}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </Modal>
 
     </div>
   );
 };
 
-export default CalorieAdminPage; 
+export default CalorieAdminPage;
