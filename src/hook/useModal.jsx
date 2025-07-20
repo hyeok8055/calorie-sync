@@ -1,99 +1,46 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Modal } from 'antd-mobile';
 import { Typography } from 'antd';
 import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 
-// // 칼로리 편차 모달을 직접 표시하는 함수를 외부에서도 사용할 수 있도록 export
-// export const showTestCalorieDifferenceModal = (mealType, mealData) => {
-//   const difference = mealData.actualCalories - mealData.estimatedCalories;
-//   const isPositive = difference > 0;
-//   const absValue = Math.abs(difference).toFixed(0);
-  
-//   // 편차에 따른 색상과 설명 텍스트 설정
-//   const differenceColor = isPositive ? '#ff4d4f' : '#1677ff';
-//   const differenceText = isPositive 
-//     ? '예측보다 더 많이 섭취했습니다'
-//     : difference < 0 
-//       ? '예측보다 더 적게 섭취했습니다' 
-//       : '예측과 동일하게 섭취했습니다';
-  
-//   // 편차에 따른 배경색 설정 (더 부드러운 톤)
-//   const backgroundColor = isPositive 
-//     ? 'rgba(255, 77, 79, 0.08)' 
-//     : difference < 0 
-//       ? 'rgba(22, 119, 255, 0.08)' 
-//       : '#f8f8f8';
-
-//   let content = (
-//     <>
-//       <div style={{ 
-//         display: 'flex', 
-//         flexDirection: 'column',
-//         justifyContent: 'center', 
-//         alignItems: 'center', 
-//         width: '100%',
-//         marginTop: '15px'
-//       }}>
-//         <Text style={{ 
-//           fontSize: '18px', 
-//           textAlign: 'center', 
-//           marginBottom: '15px',
-//           color: differenceColor,
-//           fontWeight: '600'
-//         }}>
-//           {differenceText}
-//         </Text>
-        
-//         {/* 편차 표시 패널 */}
-//         <div style={{
-//           backgroundColor: backgroundColor,
-//           borderRadius: '10px',
-//           padding: '15px 20px',
-//           width: '90%',
-//           display: 'flex',
-//           justifyContent: 'center',
-//           alignItems: 'center',
-//           boxShadow: isPositive || difference < 0 ? `0 2px 8px ${differenceColor}20` : 'none'
-//         }}>
-//           <Text 
-//             style={{ 
-//               fontSize: '24px', 
-//               fontWeight: '700', 
-//               color: differenceColor,
-//               display: 'flex',
-//               alignItems: 'center'
-//             }}
-//           >
-//             {isPositive ? (
-//               <ArrowUpOutlined style={{ marginRight: '8px', fontSize: '22px' }} />
-//             ) : difference < 0 ? (
-//               <ArrowDownOutlined style={{ marginRight: '8px', fontSize: '22px' }} />
-//             ) : null}
-//             {isPositive ? '+' : difference < 0 ? '-' : '±'}{absValue}kcal
-//           </Text>
-//         </div>
-//       </div>
-//     </>
-//   );
-
-//   try {
-//     Modal.alert({
-//       title: `${
-//         mealType === 'breakfast' ? '아침' : 
-//         mealType === 'lunch' ? '점심' : '저녁'
-//       } 식사 결과 (테스트)`,
-//       content: content,
-//       confirmText: '확인했습니다.',
-//     });
-//   } catch (error) {
-//     console.error('모달 표시 중 오류 발생:', error);
-//     alert('모달 표시 중 오류가 발생했습니다.');
-//   }
-// };
-
 export const useModal = (foodData, testMode = false) => {
+  const [viewedMeals, setViewedMeals] = useState({
+    breakfast: false,
+    lunch: false,
+    dinner: false
+  });
+
+  // localStorage에서 조회 상태 로드
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD 형식
+    const storageKey = `meal_viewed_${today}`;
+    const stored = localStorage.getItem(storageKey);
+    
+    if (stored) {
+      try {
+        setViewedMeals(JSON.parse(stored));
+      } catch (error) {
+        console.error('조회 상태 로드 실패:', error);
+      }
+    }
+  }, []);
+
+  // 조회 상태를 localStorage에 저장
+  const markMealAsViewed = useCallback((mealType) => {
+    const today = new Date().toISOString().split('T')[0];
+    const storageKey = `meal_viewed_${today}`;
+    
+    const newViewedMeals = {
+      ...viewedMeals,
+      [mealType]: true
+    };
+    
+    setViewedMeals(newViewedMeals);
+    localStorage.setItem(storageKey, JSON.stringify(newViewedMeals));
+  }, [viewedMeals]);
+
   const calculateCalorieDifference = useCallback((mealType) => {
     if (!foodData || !foodData[mealType]) return null;
     
@@ -125,7 +72,7 @@ export const useModal = (foodData, testMode = false) => {
        return (typeof meal.offset === 'number') ? meal.offset : 0;
    }, [foodData]);
 
-  const showCalorieDifferenceModal = useCallback((mealType) => {
+  const showCalorieDifferenceModal = useCallback((mealType, isAutoShow = false) => {
     // 테스트 모드일 때는 기본값 표시
     if (testMode) {
       const testContent = (
@@ -265,21 +212,50 @@ export const useModal = (foodData, testMode = false) => {
 
     try {
       Modal.alert({
-        title: `${mealType === 'dinner' ? '어제' : '지난'} ${
+        title: `${isAutoShow ? '🔔 ' : ''}${mealType === 'dinner' ? '어제' : '지난'} ${
           mealType === 'breakfast' ? '아침' : 
           mealType === 'lunch' ? '점심' : '저녁'
         } 식사 결과`,
         content: content,
         confirmText: '확인했습니다.',
+        onConfirm: () => {
+          // 모달을 확인하면 해당 식사를 조회한 것으로 표시
+          markMealAsViewed(mealType);
+        }
       });
     } catch (error) {
       console.error('모달 표시 중 오류 발생:', error);
       // 기본 alert로 대체
       alert('식사 결과를 확인할 수 없습니다. 오류가 발생했습니다.');
     }
-  }, [testMode, calculateCalorieDifference, foodData]);
+  }, [testMode, calculateCalorieDifference, foodData, markMealAsViewed]);
 
-  // 모달을 표시할 수 있는지 확인하는 함수
+  // 자동으로 표시할 수 있는 모달이 있는지 확인하는 함수
+  const checkAutoModalAvailable = useCallback(() => {
+    if (testMode || !foodData) return { available: false, mealType: null };
+
+    // 식사 기록이 있지만 아직 조회하지 않은 식사 찾기
+    const mealsToCheck = ['breakfast', 'lunch', 'dinner'];
+    
+    for (const mealType of mealsToCheck) {
+      const meal = foodData[mealType];
+      const hasData = meal && 
+        meal.actualCalories !== undefined && 
+        meal.actualCalories !== null &&
+        meal.estimatedCalories !== undefined && 
+        meal.estimatedCalories !== null;
+      
+      const notViewed = !viewedMeals[mealType];
+      
+      if (hasData && notViewed) {
+        return { available: true, mealType };
+      }
+    }
+    
+    return { available: false, mealType: null };
+  }, [foodData, viewedMeals, testMode]);
+
+  // 기존 시간 제한 기반 모달 확인 함수
   const checkModalAvailable = useCallback(() => {
     if (testMode) return { available: true, mealType: 'lunch' };
 
@@ -309,7 +285,7 @@ export const useModal = (foodData, testMode = false) => {
     };
   }, [foodData, testMode]);
 
-  // 모달을 표시하는 함수
+  // 모달을 표시하는 함수 (수동 클릭)
   const showModal = useCallback(() => {
     const modalInfo = checkModalAvailable();
     
@@ -374,9 +350,20 @@ export const useModal = (foodData, testMode = false) => {
     }
   }, [checkModalAvailable, showCalorieDifferenceModal, testMode]);
 
+  // 자동 모달 표시 함수
+  const showAutoModal = useCallback(() => {
+    const autoModalInfo = checkAutoModalAvailable();
+    
+    if (autoModalInfo.available && autoModalInfo.mealType) {
+      showCalorieDifferenceModal(autoModalInfo.mealType, true);
+    }
+  }, [checkAutoModalAvailable, showCalorieDifferenceModal]);
+
   return {
     showModal,
+    showAutoModal,
     isModalAvailable: checkModalAvailable().available,
+    isAutoModalAvailable: checkAutoModalAvailable().available,
     calculateCalorieDifference,
     getOriginalCalorieDifference,
     getMealOffset

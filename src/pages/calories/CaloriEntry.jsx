@@ -189,12 +189,25 @@ const CaloriEntry = () => {
         </div>
       ) : (
         <div style={{ width: '100%', height: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingBottom: '30px' }}>
-          <div style={{ marginTop: 30, marginBottom: 20 }}>
-            <Text style={{ fontSize: '28px', color: '#5FDD9D', fontFamily: 'Pretendard-800', letterSpacing: '1.5px' }}>
-              칼로리 편차 확인하기
+          <div style={{ marginTop: 30, marginBottom: 30, textAlign: 'center' }}>
+            <Text style={{ 
+              fontSize: '28px', 
+              color: '#5FDD9D', 
+              fontFamily: 'Pretendard-800', 
+              letterSpacing: '1.5px',
+              display: 'block',
+              marginBottom: '12px'
+            }}>
+              예상 칼로리 추측하기
+            </Text>
+            <Text style={{
+              fontSize: '19px',
+              color: '#666',
+              fontFamily: 'Pretendard-600',
+            }}>
+              선택한 식사의 예상되는 칼로리를 추정해보세요
             </Text>
           </div>
-          
           {/* 선택한 음식 목록 섹션 */}
           <div style={{ 
             width: '90%', 
@@ -222,7 +235,7 @@ const CaloriEntry = () => {
                 <Text style={{ color: 'white', fontWeight: '800', fontSize: '15px' }}>1</Text>
               </div>
               <Text style={{ fontSize: '18px', fontWeight: '700', fontFamily: 'Pretendard-700' }}>
-                선택한 음식 ({selectedFoodNames.length}개)
+                선택된 메뉴 ({selectedFoodNames.length}개)
               </Text>
             </div>
             
@@ -303,12 +316,12 @@ const CaloriEntry = () => {
                 <Text style={{ color: 'white', fontWeight: '800', fontSize: '15px' }}>2</Text>
               </div>
               <Text style={{ fontSize: '18px', fontWeight: '700', fontFamily: 'Pretendard-700' }}>
-                예상 칼로리 입력
+                총 칼로리는?
               </Text>
             </div>
             
             <Text style={{ fontSize: '16px', color: '#666', fontFamily: 'Pretendard-500', marginBottom: '15px', display: 'block' }}>
-              선택한 모든 음식을 합한 총 예상 칼로리를 입력해주세요
+              위 <Text style={{ fontSize: '17px', fontWeight: '700', fontFamily: 'Pretendard-700' }}>{selectedFoodNames.length}가지</Text> 음식의 총 칼로리는 몇 Kcal일까요?
             </Text>
             
             <div style={{ 
@@ -334,7 +347,7 @@ const CaloriEntry = () => {
                 }}
               />
               <Text style={{ fontSize: '14px', color: '#888', textAlign: 'center' }}>
-                정확한 값을 모른다면 최대한 가깝게 추정해보세요
+                정확한 값을 모르더라도 최대한 가깝게 추정해보세요
               </Text>
             </div>
           </div>
@@ -358,11 +371,11 @@ const CaloriEntry = () => {
           >
             <Text style={{ 
               color: estimatedCalories ? 'white' : '#999', 
-              fontSize: '18px', 
+              fontSize: '19px', 
               fontWeight: '700', 
               fontFamily: 'Pretendard-700' 
             }}>
-              결과 기록하기
+              응답 제출하기
             </Text>
           </Button>
         </div>

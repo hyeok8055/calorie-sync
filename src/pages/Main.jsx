@@ -1,39 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { Typography, Row, Col, Button, Card, Progress, Divider } from 'antd';
+import { Typography, Row, Col, Button, Card } from 'antd';
 import { useNavigate } from 'react-router-dom';
-import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import { useSelector } from 'react-redux';
 import { useFood } from '@/hook/useFood';
 import { useModal } from '@/hook/useModal';
-// import { showTestCalorieDifferenceModal } from '@/hook/useModal';
-import { BellOutline } from 'antd-mobile-icons';
 import { 
   CheckCircleTwoTone, 
   ClockCircleOutlined, 
   CoffeeOutlined, 
   FireOutlined,
   HistoryOutlined,
-  ExperimentOutlined
 } from '@ant-design/icons';
 
 const { Text, Title } = Typography;
 
-// 테스트용 더미 데이터
-const TEST_DATA = {
-  moreCase: {
-    actualCalories: 750,
-    estimatedCalories: 500,
-  },
-  lessCase: {
-    actualCalories: 400,
-    estimatedCalories: 600,
-  },
-  sameCase: {
-    actualCalories: 500,
-    estimatedCalories: 500,
-  }
-};
 
 const Main = () => {
   const uid = useSelector((state) => state.auth.user?.uid);
@@ -53,25 +34,19 @@ const Main = () => {
   const [currentTimeCategory, setCurrentTimeCategory] = useState('');
   const navigate = useNavigate();
 
-  const { showModal, isModalAvailable } = useModal(foodData);
+  const { showModal, showAutoModal, isModalAvailable, isAutoModalAvailable } = useModal(foodData);
 
-  // // 테스트 모달 표시 함수
-  // const showTestModals = () => {
-  //   // 더 많이 먹은 경우
-  //   setTimeout(() => {
-  //     showTestCalorieDifferenceModal('breakfast', TEST_DATA.moreCase);
+  // 자동 모달 표시를 위한 useEffect 추가
+  useEffect(() => {
+    if (foodData && isAutoModalAvailable) {
+      // 페이지 로드 후 1초 뒤에 자동 모달 표시
+      const timer = setTimeout(() => {
+        showAutoModal();
+      }, 1000);
       
-  //     // 더 적게 먹은 경우
-  //     setTimeout(() => {
-  //       showTestCalorieDifferenceModal('lunch', TEST_DATA.lessCase);
-        
-  //       // 동일하게 먹은 경우
-  //       setTimeout(() => {
-  //         showTestCalorieDifferenceModal('dinner', TEST_DATA.sameCase);
-  //       }, 2000);
-  //     }, 2000);
-  //   }, 500);
-  // };
+      return () => clearTimeout(timer);
+    }
+  }, [foodData, isAutoModalAvailable, showAutoModal]);
 
   useEffect(() => {
     if (foodData) {
@@ -150,11 +125,11 @@ const Main = () => {
   const getTimeRestrictionMessage = (mealType) => {
     switch (mealType) {
       case 'breakfast':
-        return '06시부터 11시59분까지만 기록 가능합니다';
+        return '06시부터 11시59분까지만 기록 가능';
       case 'lunch':
-        return '12시부터 17시59분까지만 기록 가능합니다';
+        return '12시부터 17시59분까지만 기록 가능';
       case 'dinner':
-        return '18시부터 23시59분까지만 기록 가능합니다';
+        return '18시부터 23시59분까지만 기록 가능';
       default:
         return '';
     }
@@ -169,15 +144,6 @@ const Main = () => {
   }).replace(/\.$/, "");
   
   const weekday = today.toLocaleDateString("ko-KR", { weekday: "long" });
-
-  // 현재 식사 완료 상태에 따른 진행률 계산
-  const completedMeals = [
-    mealFlags.breakfast, 
-    mealFlags.lunch, 
-    mealFlags.dinner
-  ].filter(Boolean).length;
-  
-  const progressPercent = Math.floor((completedMeals / 3) * 100);
 
   return (
     <div className="h-[100%] bg-bg1 p-4 pb-16 overflow-auto">
@@ -201,23 +167,6 @@ const Main = () => {
             </Text>
           </div>
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            {/* 테스트 버튼 추가 */}
-            {/* <div 
-              onClick={showTestModals}
-              style={{ 
-                position: 'relative', 
-                cursor: 'pointer',
-                padding: '8px',
-                background: '#f5f5f5',
-                borderRadius: '50%',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                marginRight: '10px'
-              }}
-            >
-              <ExperimentOutlined style={{ fontSize: '20px', color: '#1677ff' }} />
-            </div> */}
             <div 
               onClick={showModal}
               style={{ 
@@ -246,26 +195,6 @@ const Main = () => {
             </div>
           </div>
         </Row>
-        
-        <Divider style={{ margin: '12px 0' }} />
-        
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <Text style={{ fontSize: '16px', fontWeight: '600', fontFamily: 'Pretendard-600'}}>
-              오늘의 식사 기록 진행률
-            </Text>
-            <Text style={{ fontSize: '16px', fontWeight: '700', fontFamily: 'Pretendard-700', color: '#5FDD9D'}}>
-              {progressPercent}%
-            </Text>
-          </div>
-          <Progress 
-            percent={progressPercent} 
-            showInfo={false} 
-            strokeColor="#5FDD9D" 
-            trailColor="#f0f0f0"
-            style={{ height: '8px' }}
-          />
-        </div>
       </Card>
 
       {/* 식사 기록 버튼 섹션 */}
@@ -407,7 +336,15 @@ const MealButton = ({
           alignItems: 'center',
           borderRadius: '12px'
         }}>
-          <ClockCircleOutlined style={{ fontSize: 24, color: '#ff4d4f', marginBottom: '8px' }} />
+          <div style={{
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center',
+            borderRadius: '12px'
+          }}>
+            <Text style={{ fontSize: '16px', color: '#ff4d4f', fontFamily: 'Pretendard-500', textAlign: 'center', marginBottom: '6.5px', marginRight: '8px' }}>식사 미기록</Text>
+            <ClockCircleOutlined style={{ fontSize: 24, color: '#ff4d4f', marginBottom: '8px' }} />
+          </div>
           <Text style={{ fontSize: '14px', color: '#ff4d4f', fontFamily: 'Pretendard-500', textAlign: 'center' }}>
             {restrictionMessage}
           </Text>
@@ -417,4 +354,4 @@ const MealButton = ({
   );
 };
 
-export default Main; 
+export default Main;
