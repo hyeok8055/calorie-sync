@@ -11,13 +11,17 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'robots.txt', 'icons/*.png', 'icons/*.ico'],
       devOptions: {
-        enabled: true
+        enabled: true,
+        type: 'module'
       },
-      strategies: 'generateSW',
-      filename: 'sw.js',
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'firebase-messaging-sw.js',
       manifestFilename: 'manifest.webmanifest',
+      injectManifest: {
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB로 증가
+      },
       workbox: {
-        importScripts: ['firebase-messaging-sw.js'],
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         runtimeCaching: [
           {

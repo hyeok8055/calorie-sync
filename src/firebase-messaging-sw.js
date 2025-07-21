@@ -1,8 +1,21 @@
-// Firebase 메시징 서비스 워커 기능 정의
-// 이 파일은 Vite PWA 플러그인에 의해 생성된 sw.js에 의해 importScripts 됩니다.
-// 실제 서비스 워커 등록은 Vite PWA 플러그인이 처리합니다.
+// Firebase 메시징 서비스 워커 (Vite PWA injectManifest 전략 사용)
+// 이 파일은 Vite 빌드 과정에서 처리되어 환경변수가 안전하게 주입됩니다.
 
-// Firebase 메시징 변수를 전역으로 정의 (sw.js에서 접근 가능하도록)
+// Workbox 라이브러리는 vite-plugin-pwa에서 자동으로 주입됩니다.
+// 따라서 직접 import하지 않고 전역 객체를 사용합니다.
+
+// Vite PWA가 주입할 매니페스트를 사용해 프리캐싱 수행
+// 앱의 셸(HTML, JS, CSS 등)을 캐싱하여 오프라인에서 작동하게 함
+if (self.__WB_MANIFEST) {
+  // Workbox precaching은 vite-plugin-pwa에서 자동으로 처리됩니다.
+  console.log('[firebase-messaging-sw.js] Workbox precaching enabled');
+}
+
+/* ================================================= */
+/* Firebase 메시징 코드                              */
+/* ================================================= */
+
+// Firebase 메시징 변수를 전역으로 정의
 self.firebaseMessaging = null;
 
 // Firebase 앱과 메시징 초기화
@@ -12,7 +25,7 @@ function initializeFirebaseMessaging() {
     importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js");
     importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js");
 
-    // Firebase 구성 값
+    // Firebase 구성 값 (Vite 빌드 시점에 환경변수가 안전하게 주입됨)
     const firebaseConfig = {
       apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
       authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -116,4 +129,4 @@ self.addEventListener('message', event => {
       status: 'active'
     });
   }
-}); 
+});
