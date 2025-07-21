@@ -234,7 +234,36 @@ export const useModal = (foodData, testMode = false) => {
   const checkAutoModalAvailable = useCallback(() => {
     if (testMode || !foodData) return { available: false, mealType: null };
 
-    // 식사 기록이 있지만 아직 조회하지 않은 식사 찾기
+    const now = new Date();
+    const hours = now.getHours();
+
+    // 현재 시간에 따라 조회 가능한 식사 타입 결정
+    let allowedMealType = null;
+    if (hours >= 6 && hours <= 10) {
+      allowedMealType = 'dinner';  // 전날 저녁 식사 결과
+    } else if (hours >= 11 && hours <= 14) {
+      allowedMealType = 'breakfast';  // 아침 식사 결과
+    } else if (hours >= 17 && hours <= 20) {
+      allowedMealType = 'lunch';  // 점심 식사 결과
+    }
+
+    // 현재 시간대에 조회 가능한 식사가 있는지 먼저 확인
+    if (allowedMealType) {
+      const meal = foodData[allowedMealType];
+      const hasData = meal && 
+        meal.actualCalories !== undefined && 
+        meal.actualCalories !== null &&
+        meal.estimatedCalories !== undefined && 
+        meal.estimatedCalories !== null;
+      
+      const notViewed = !viewedMeals[allowedMealType];
+      
+      if (hasData && notViewed) {
+        return { available: true, mealType: allowedMealType };
+      }
+    }
+
+    // 현재 시간대에 조회할 식사가 없다면, 미조회된 식사 중 조회 가능한 시간이 지난 것만 찾기
     const mealsToCheck = ['breakfast', 'lunch', 'dinner'];
     
     for (const mealType of mealsToCheck) {
@@ -247,7 +276,17 @@ export const useModal = (foodData, testMode = false) => {
       
       const notViewed = !viewedMeals[mealType];
       
-      if (hasData && notViewed) {
+      // 각 식사별로 조회 가능한 시간이 지났는지 확인
+      let canViewThisMeal = false;
+      if (mealType === 'breakfast' && hours >= 11) {
+        canViewThisMeal = true; // 아침식사는 11시 이후부터 조회 가능
+      } else if (mealType === 'lunch' && hours >= 17) {
+        canViewThisMeal = true; // 점심식사는 17시 이후부터 조회 가능
+      } else if (mealType === 'dinner' && hours >= 6) {
+        canViewThisMeal = true; // 저녁식사는 다음날 6시 이후부터 조회 가능
+      }
+      
+      if (hasData && notViewed && canViewThisMeal) {
         return { available: true, mealType };
       }
     }

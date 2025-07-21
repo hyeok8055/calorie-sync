@@ -5,4 +5,6 @@ export const CLEAR_AUTH_STATUS = 'CLEAR_AUTH_STATUS';
 export const SET_WEEKLY_DATA = 'SET_WEEKLY_DATA';
 export const CLEAR_WEEKLY_DATA = 'CLEAR_WEEKLY_DATA';
 export const SET_FOODS = 'SET_FOODS';
-export const SET_FCM_TOKEN = 'SET_FCM_TOKEN'; 
+export const SET_FCM_TOKEN = 'SET_FCM_TOKEN';
+export const SET_MEAL_FLAGS = 'SET_MEAL_FLAGS';
+export const UPDATE_MEAL_FLAG = 'UPDATE_MEAL_FLAG';

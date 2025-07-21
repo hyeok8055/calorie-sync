@@ -1,30 +1,29 @@
 import React, { useEffect, useState } from 'react';
-import { Typography, Row, Col, Button, Card } from 'antd';
+import { Typography, Row, Col, Button, Card, Radio, Switch } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import 'dayjs/locale/ko';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { useFood } from '@/hook/useFood';
 import { useModal } from '@/hook/useModal';
+import { setMealFlags, updateMealFlag } from '@/redux/actions/mealActions';
+import { getMealFlags, updateMealFlag as updateMealFlagAPI } from '@/api/api';
 import { 
   CheckCircleTwoTone, 
   ClockCircleOutlined, 
   CoffeeOutlined, 
   FireOutlined,
   HistoryOutlined,
+  MinusCircleOutlined,
 } from '@ant-design/icons';
 
 const { Text, Title } = Typography;
 
 
 const Main = () => {
+  const dispatch = useDispatch();
   const uid = useSelector((state) => state.auth.user?.uid);
+  const mealFlags = useSelector((state) => state.meal.mealFlags);
   const { foodData, loading, error } = useFood(uid);
-  const [mealFlags, setMealFlags] = useState({
-    breakfast: false,
-    lunch: false,
-    dinner: false,
-    snack: false,
-  });
   const [timeRestrictions, setTimeRestrictions] = useState({
     breakfast: false,
     lunch: false,
@@ -48,17 +47,34 @@ const Main = () => {
     }
   }, [foodData, isAutoModalAvailable, showAutoModal]);
 
+  // Firestore에서 meal flag 데이터 가져오기
+  useEffect(() => {
+    const loadMealFlags = async () => {
+      if (uid) {
+        try {
+          const flags = await getMealFlags(uid);
+          dispatch(setMealFlags(flags));
+        } catch (error) {
+          console.error('Meal flags 로드 실패:', error);
+        }
+      }
+    };
+    
+    loadMealFlags();
+  }, [uid, dispatch]);
+
   useEffect(() => {
     if (foodData) {
-      setMealFlags({
-        breakfast: foodData.breakfast?.flag === 1,
-        lunch: foodData.lunch?.flag === 1,
-        dinner: foodData.dinner?.flag === 1,
-        // 간식은 여러번 기록 가능하므로 플래그 대신 오늘 날짜에 이미 기록했는지로 판단
-        snack: false, // 언제든지 기록 가능하도록 항상 false로 설정
-      });
+      // foodData에서 식사 완료 상태 확인하여 Redux 상태 업데이트
+      const updatedFlags = {
+        breakfast: foodData.breakfast?.flag || mealFlags.breakfast || 0,
+        lunch: foodData.lunch?.flag || mealFlags.lunch || 0,
+        dinner: foodData.dinner?.flag || mealFlags.dinner || 0,
+        snack: 0, // 간식은 언제든지 기록 가능하도록 항상 0으로 설정
+      };
+      dispatch(setMealFlags(updatedFlags));
     }
-  }, [foodData]);
+  }, [foodData, dispatch]);
 
   // 시간 제한 확인을 위한 useEffect
   useEffect(() => {
@@ -90,10 +106,52 @@ const Main = () => {
     };
 
     checkTimeRestrictions();
-    const intervalId = setInterval(checkTimeRestrictions, 60000); // 1분마다 시간 제한 확인
+     const intervalId = setInterval(checkTimeRestrictions, 60000); // 1분마다 체크
+     
+     return () => clearInterval(intervalId);
+   }, []);
 
-    return () => clearInterval(intervalId);
-  }, []);
+  // 단식 스위치 컴포넌트
+  const FastingSwitch = ({ isFasting, onChange, disabled }) => {
+    return (
+      <div 
+        className={`w-full rounded-xl p-4 ${disabled ? 'opacity-60' : ''}`}
+        style={{
+          height: '91px',
+          fontFamily: 'Pretendard-600',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+          background: isFasting ? '#fff2f0' : 'white',
+          borderColor: isFasting ? '#ff7875' : '#e8e8e8',
+          borderWidth: isFasting ? '2px' : '1px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: '8px'
+        }}
+      >
+        <Text 
+          style={{ 
+            fontSize: '17px', 
+            fontFamily: 'Pretendard-500',
+            color: isFasting ? '#ff7875' : '#999',
+            margin: 0,
+            marginBottom: '2px'
+          }}
+        >
+          단식
+        </Text>
+        <Switch 
+          checked={isFasting}
+          onChange={onChange}
+          disabled={disabled}
+          style={{
+            backgroundColor: isFasting ? '#ff7875' : undefined
+          }}
+        />
+      </div>
+    );
+  };
 
   if (loading) {
     return (
@@ -119,6 +177,23 @@ const Main = () => {
 
   const handleMealClick = (mealType) => {
     navigate(`/meals/${mealType}`);
+  };
+
+  // 단식 스위치 핸들러
+  const handleFastingToggle = async (mealType, checked) => {
+    const newFlag = checked ? 2 : 0;
+    
+    // Redux 상태 즉시 업데이트
+    dispatch(updateMealFlag(mealType, newFlag));
+    
+    // Firestore에 저장
+    try {
+      await updateMealFlagAPI(uid, mealType, newFlag);
+    } catch (error) {
+      console.error('단식 상태 저장 실패:', error);
+      // 실패 시 이전 상태로 롤백
+      dispatch(updateMealFlag(mealType, checked ? 0 : 2));
+    }
   };
 
   // 시간 제한 메시지 반환 함수
@@ -203,45 +278,85 @@ const Main = () => {
       </Title>
       
       <Row gutter={[16, 16]} justify="center">
+        {/* 아침 식사 */}
         <Col span={24}>
-          <MealButton 
-            title="아침 식사 기록"
-            icon={<FireOutlined />}
-            time="06:00 - 11:59"
-            onClick={() => handleMealClick('breakfast')}
-            disabled={mealFlags.breakfast || timeRestrictions.breakfast}
-            isCompleted={mealFlags.breakfast}
-            timeRestricted={!mealFlags.breakfast && timeRestrictions.breakfast}
-            restrictionMessage={getTimeRestrictionMessage('breakfast')}
-          />
+          <Row gutter={[12, 0]} align="middle">
+            <Col span={18}>
+              <MealButton 
+                title="아침 식사 기록"
+                icon={<FireOutlined />}
+                time="06:00 - 11:59"
+                onClick={() => handleMealClick('breakfast')}
+                disabled={mealFlags.breakfast === 1 || mealFlags.breakfast === 2 || timeRestrictions.breakfast}
+                isCompleted={mealFlags.breakfast === 1}
+                isFasting={mealFlags.breakfast === 2}
+                timeRestricted={mealFlags.breakfast === 0 && timeRestrictions.breakfast}
+                restrictionMessage={getTimeRestrictionMessage('breakfast')}
+              />
+            </Col>
+            <Col span={6}>
+              <FastingSwitch 
+                isFasting={mealFlags.breakfast === 2}
+                onChange={(checked) => handleFastingToggle('breakfast', checked)}
+                disabled={mealFlags.breakfast === 1}
+              />
+            </Col>
+          </Row>
         </Col>
         
+        {/* 점심 식사 */}
         <Col span={24}>
-          <MealButton 
-            title="점심 식사 기록"
-            icon={<FireOutlined />}
-            time="12:00 - 17:59"
-            onClick={() => handleMealClick('lunch')}
-            disabled={mealFlags.lunch || timeRestrictions.lunch}
-            isCompleted={mealFlags.lunch}
-            timeRestricted={!mealFlags.lunch && timeRestrictions.lunch}
-            restrictionMessage={getTimeRestrictionMessage('lunch')}
-          />
+          <Row gutter={[12, 0]} align="middle">
+            <Col span={18}>
+              <MealButton 
+                title="점심 식사 기록"
+                icon={<FireOutlined />}
+                time="12:00 - 17:59"
+                onClick={() => handleMealClick('lunch')}
+                disabled={mealFlags.lunch === 1 || mealFlags.lunch === 2 || timeRestrictions.lunch}
+                isCompleted={mealFlags.lunch === 1}
+                isFasting={mealFlags.lunch === 2}
+                timeRestricted={mealFlags.lunch === 0 && timeRestrictions.lunch}
+                restrictionMessage={getTimeRestrictionMessage('lunch')}
+              />
+            </Col>
+            <Col span={6}>
+              <FastingSwitch 
+                isFasting={mealFlags.lunch === 2}
+                onChange={(checked) => handleFastingToggle('lunch', checked)}
+                disabled={mealFlags.lunch === 1}
+              />
+            </Col>
+          </Row>
         </Col>
         
+        {/* 저녁 식사 */}
         <Col span={24}>
-          <MealButton 
-            title="저녁 식사 기록"
-            icon={<FireOutlined />}
-            time="18:00 - 05:59"
-            onClick={() => handleMealClick('dinner')}
-            disabled={mealFlags.dinner || timeRestrictions.dinner}
-            isCompleted={mealFlags.dinner}
-            timeRestricted={!mealFlags.dinner && timeRestrictions.dinner}
-            restrictionMessage={getTimeRestrictionMessage('dinner')}
-          />
+          <Row gutter={[12, 0]} align="middle">
+            <Col span={18}>
+              <MealButton 
+                title="저녁 식사 기록"
+                icon={<FireOutlined />}
+                time="18:00 - 05:59"
+                onClick={() => handleMealClick('dinner')}
+                disabled={mealFlags.dinner === 1 || mealFlags.dinner === 2 || timeRestrictions.dinner}
+                isCompleted={mealFlags.dinner === 1}
+                isFasting={mealFlags.dinner === 2}
+                timeRestricted={mealFlags.dinner === 0 && timeRestrictions.dinner}
+                restrictionMessage={getTimeRestrictionMessage('dinner')}
+              />
+            </Col>
+            <Col span={6}>
+              <FastingSwitch 
+                isFasting={mealFlags.dinner === 2}
+                onChange={(checked) => handleFastingToggle('dinner', checked)}
+                disabled={mealFlags.dinner === 1}
+              />
+            </Col>
+          </Row>
         </Col>
         
+        {/* 간식 */}
         <Col span={24}>
           <MealButton 
             title="간식 기록"
@@ -250,6 +365,7 @@ const Main = () => {
             onClick={() => handleMealClick('snack')}
             disabled={false}
             isCompleted={false}
+            isFasting={false}
             timeRestricted={false}
             accent={false}
           />
@@ -267,6 +383,7 @@ const MealButton = ({
   onClick, 
   disabled, 
   isCompleted, 
+  isFasting = false,
   timeRestricted, 
   restrictionMessage,
   accent = false
@@ -277,7 +394,7 @@ const MealButton = ({
       disabled={disabled}
       className={`w-full rounded-xl p-0 relative ${disabled ? 'opacity-60' : ''}`}
       style={{ 
-        height: 'auto', 
+        height: '91px', 
         textAlign: 'left', 
         fontFamily: 'Pretendard-600', 
         boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
@@ -287,41 +404,64 @@ const MealButton = ({
         overflow: 'hidden'
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            marginBottom: '8px',
-            color: isCompleted ? '#5FDD9D' : '#333'
-          }}>
-            {icon}
-            <Text style={{ 
-              marginLeft: '8px', 
-              fontSize: '18px', 
-              fontWeight: '600', 
-              fontFamily: 'Pretendard-600',
-              color: isCompleted ? '#5FDD9D' : '#333'
-            }}>
-              {title}
-            </Text>
-          </div>
+      {isFasting ? (
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center',
+          height: '100%'
+        }}>
           <Text style={{ 
-            fontSize: '14px', 
-            color: '#888', 
-            fontFamily: 'Pretendard-500'
+            fontSize: '20px',
+            fontWeight: '600',
+            fontFamily: 'Pretendard-600',
+            color: '#ff7875',
+            textAlign: 'center'
           }}>
-            {time}
+            {title.includes('아침') ? '아침 단식' : 
+             title.includes('점심') ? '점심 단식' : 
+             title.includes('저녁') ? '저녁 단식' : '단식 중'}
           </Text>
         </div>
-        {isCompleted && (
-          <CheckCircleTwoTone
-            twoToneColor="#5FDD9D"
-            style={{ fontSize: 24 }}
-          />
-        )}
-      </div>
-      
+      ) : (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              marginBottom: '8px',
+              color: isCompleted ? '#5FDD9D' : '#333'
+            }}>
+              {icon}
+              <Text style={{ 
+                marginLeft: '8px', 
+                fontSize: '18px', 
+                fontWeight: '600', 
+                fontFamily: 'Pretendard-600',
+                color: isCompleted ? '#5FDD9D' : '#333'
+              }}>
+                {title}
+              </Text>
+            </div>
+            <Text style={{ 
+              fontSize: '14px', 
+              color: '#888', 
+              fontFamily: 'Pretendard-500'
+            }}>
+              {time}
+            </Text>
+          </div>
+          
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            {isCompleted && (
+              <CheckCircleTwoTone
+                twoToneColor="#5FDD9D"
+                style={{ fontSize: 24 }}
+              />
+            )}
+          </div>
+        </div>
+      )}
       {timeRestricted && (
         <div style={{ 
           position: 'absolute', 
