@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavBar, Space, Button } from 'antd-mobile';
 import { SetOutline } from 'antd-mobile-icons';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import SidePopUp from './common/SidePopUp';
 import { auth } from '../firebaseconfig';
 import { useDispatch } from 'react-redux';
@@ -10,6 +10,7 @@ import { signOut } from 'firebase/auth';
 
 const Header = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [visiblePopup, setVisiblePopup] = useState(false);
   const [userName, setUserName] = useState('');
   const [email, setEmail] = useState('');
@@ -47,18 +48,10 @@ const Header = () => {
     </div>
   );
 
-  const left = (
-    <Button 
-      size='small'
-      onClick={handleLogout}
-      style={{ 
-        fontSize: '14px',
-        padding: '4px 8px',
-      }}
-    >
-      로그아웃
-    </Button>
-  );
+  // 설문조사 페이지에서는 헤더를 숨김
+  if (location.pathname === '/survey') {
+    return null;
+  }
 
   return (
     <>
@@ -74,4 +67,4 @@ const Header = () => {
   );
 };
 
-export default Header; 
+export default Header;

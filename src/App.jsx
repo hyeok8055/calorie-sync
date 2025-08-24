@@ -9,6 +9,8 @@ import { usePwaInstall } from './hook/usePwaInstall';
 import { useDeviceInfo } from './hook/useDeviceInfo';
 import { useNotificationPermission } from './hook/useNotificationPermission';
 import { setupForegroundHandler } from './firebaseconfig';
+import { useSurvey } from './hook/useSurvey';
+import SurveyModal from './components/common/SurveyModal';
 
 // 스타일 상수
 const pwaInstallPromptStyle = {
@@ -118,6 +120,11 @@ const App = () => {
   const { showInstallPrompt, installPwa } = usePwaInstall();
   // 알림 권한 훅 사용 (isAndroidPwa 속성 추가)
   const { showPermissionPrompt, requestPermission, isAndroidPwa } = useNotificationPermission();
+  // 설문조사 관련 훅
+  const { checkGlobalSurveyStatus, markSurveyCompleted } = useSurvey();
+  const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
+  const surveyState = useSelector((state) => state.survey);
+  const uid = useSelector((state) => state.auth.user?.uid);
 
   // 포그라운드 메시지 핸들러 초기화
   useEffect(() => {
@@ -127,6 +134,27 @@ const App = () => {
       // console.log('[App.jsx] 포그라운드 메시지 핸들러 설정 완료');
     }
   }, []);
+
+  // 설문조사 상태 확인
+  useEffect(() => {
+    if (isAuthenticated && uid) {
+      // 전역 설문조사 상태 확인 (사용자 완료 상태도 함께 확인됨)
+      checkGlobalSurveyStatus();
+    }
+  }, [isAuthenticated, uid, checkGlobalSurveyStatus]);
+
+  // 설문조사 모달 표시 여부 결정
+  const shouldShowSurveyModal = isAuthenticated && 
+    surveyState.isActive && 
+    surveyState.surveyId && 
+    !surveyState.completedSurveys.some(completed => completed.surveyId === surveyState.surveyId);
+
+  // 설문조사 모달 닫기 함수
+  const handleCloseSurveyModal = () => {
+    if (surveyState.surveyId) {
+      markSurveyCompleted(surveyState.surveyId);
+    }
+  };
 
   // 알림 권한 요청 버튼 클릭 핸들러
   const handleNotificationRequest = () => {
@@ -171,6 +199,15 @@ const App = () => {
       )}
 
       <ConditionalHeaderFooter />
+      
+      {/* 설문조사 모달 */}
+      {shouldShowSurveyModal && (
+        <SurveyModal 
+          visible={shouldShowSurveyModal}
+          surveyId={surveyState.surveyId}
+          onClose={handleCloseSurveyModal}
+        />
+      )}
     </BrowserRouter>
   );
 };

@@ -92,7 +92,7 @@ export const useModal = (foodData, testMode = false) => {
               color: '#888',
               fontWeight: '600' 
             }}>
-              예측과 실제 섭취 칼로리가 동일합니다
+              완벽해요! 예측과 거의 일치합니다
             </Text>
             <div style={{
               backgroundColor: '#f8f8f8',
@@ -140,23 +140,54 @@ export const useModal = (foodData, testMode = false) => {
       return;
     }
 
-    const isPositive = difference > 0;
+    // 실제 섭취 칼로리(y) 계산
+    const meal = foodData[mealType];
+    const actualCalories = meal.actualCalories;
+    const beta = difference; // β = y - ŷ (오차)
+    
+    // 3가지 케이스 분류
+    let feedbackCase = 'accurate'; // 기본값
+    let messageText = '';
+    let messageColor = '#888';
+    let backgroundColor = '#f8f8f8';
+    let calorieTextColor = '#888';
+    
+    // 케이스 분류 로직
+    const threshold = 0.2 * actualCalories; // 20% 임계값
+    
+    if (beta >= -threshold && beta <= threshold) {
+      // 1. 정확 (±20% 이내)
+      feedbackCase = 'accurate';
+      messageText = '완벽해요! 예측과 거의 일치합니다';
+      messageColor = '#888';
+      backgroundColor = '#f8f8f8';
+      calorieTextColor = '#888';
+    } else if (beta < -threshold) {
+      // 2. 적게 섭취 (-20% 초과)
+      feedbackCase = 'less';
+      messageText = (
+        <span>
+          실제 섭취량이 예상보다 <span style={{ color: '#ff4d4f' }}>-{Math.abs(beta).toFixed(0)}kcal</span> 적네요.
+        </span>
+      );
+      messageColor = '#333'; // 검은색
+      backgroundColor = 'rgba(255, 77, 79, 0.08)';
+      calorieTextColor = '#ff4d4f'; // 붉은색
+    } else {
+      // 3. 많이 섭취 (+20% 초과)
+      feedbackCase = 'more';
+      messageText = (
+        <span>
+          실제 섭취량이 예상보다 <span style={{ color: '#1677ff' }}>+{beta.toFixed(0)}kcal</span> 많네요.
+        </span>
+      );
+      messageColor = '#333'; // 검은색
+      backgroundColor = 'rgba(22, 119, 255, 0.08)';
+      calorieTextColor = '#1677ff'; // 푸른색
+    }
+    
     const absValue = Math.abs(difference).toFixed(0);
-    
-    // 편차에 따른 색상과 설명 텍스트 설정
-    const differenceColor = isPositive ? '#ff4d4f' : '#1677ff';
-    const differenceText = isPositive 
-      ? '예측보다 더 많이 섭취했습니다'
-      : difference < 0 
-        ? '예측보다 더 적게 섭취했습니다' 
-        : '예측과 동일하게 섭취했습니다';
-    
-    // 편차에 따른 배경색 설정 (더 부드러운 톤)
-    const backgroundColor = isPositive 
-      ? 'rgba(255, 77, 79, 0.08)' 
-      : difference < 0 
-        ? 'rgba(22, 119, 255, 0.08)' 
-        : '#f8f8f8';
+    const isPositive = difference > 0;
 
     let content = (
       <>
@@ -172,10 +203,10 @@ export const useModal = (foodData, testMode = false) => {
             fontSize: '18px', 
             textAlign: 'center', 
             marginBottom: '15px',
-            color: differenceColor,
+            color: messageColor,
             fontWeight: '600'
           }}>
-            {differenceText}
+            {messageText}
           </Text>
           
           {/* 편차 표시 패널 */}
@@ -187,23 +218,23 @@ export const useModal = (foodData, testMode = false) => {
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
-            boxShadow: isPositive || difference < 0 ? `0 2px 8px ${differenceColor}20` : 'none'
+            boxShadow: feedbackCase !== 'accurate' ? `0 2px 8px ${calorieTextColor}20` : 'none'
           }}>
             <Text 
               style={{ 
                 fontSize: '24px', 
                 fontWeight: '700', 
-                color: differenceColor,
+                color: calorieTextColor,
                 display: 'flex',
                 alignItems: 'center'
               }}
             >
-              {isPositive ? (
+              {feedbackCase === 'accurate' ? null : isPositive ? (
                 <ArrowUpOutlined style={{ marginRight: '8px', fontSize: '22px' }} />
-              ) : difference < 0 ? (
+              ) : (
                 <ArrowDownOutlined style={{ marginRight: '8px', fontSize: '22px' }} />
-              ) : null}
-              {isPositive ? '+' : difference < 0 ? '-' : '±'}{absValue}kcal
+              )}
+              {feedbackCase === 'accurate' ? '±' : isPositive ? '+' : '-'}{absValue}kcal
             </Text>
           </div>
         </div>

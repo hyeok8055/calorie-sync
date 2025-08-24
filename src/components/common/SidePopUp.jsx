@@ -5,6 +5,7 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebaseconfig';
 import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
+import { useSurvey } from '../../hook/useSurvey';
 import {
   UserOutline,
   EditSOutline,
@@ -13,7 +14,7 @@ import {
   UndoOutline,
   AppstoreOutline,
   LoopOutline,
-} from 'antd-mobile-icons';
+  } from 'antd-mobile-icons';
 
 const { Text } = Typography;
 
@@ -33,6 +34,7 @@ const SidePopUp = ({ visible, onClose, onLogout, userName, email }) => {
   const uid = useSelector((state) => state.auth.user?.uid);
   const [form] = Form.useForm();
   const navigate = useNavigate();
+  const { activateSurvey, deactivateSurvey, loading: surveyLoading } = useSurvey();
 
   // 사용자 정보 불러오기
   useEffect(() => {
@@ -98,6 +100,32 @@ const SidePopUp = ({ visible, onClose, onLogout, userName, email }) => {
   const handleAdminPageClick = () => {
     navigate('/admin');
     onClose();
+  };
+
+  const handleSurveyActivation = async () => {
+    try {
+      const result = await activateSurvey();
+      if (result.success) {
+        Toast.show({
+          icon: <CheckCircleOutline />,
+          content: '설문조사가 활성화되었습니다. 모든 사용자에게 알림이 전송됩니다.',
+          duration: 3000
+        });
+      } else {
+        Toast.show({
+          icon: <CloseCircleOutline />,
+          content: '설문조사 활성화에 실패했습니다.',
+          duration: 3000
+        });
+      }
+    } catch (error) {
+      console.error('설문조사 활성화 오류:', error);
+      Toast.show({
+        icon: <CloseCircleOutline />,
+        content: '오류가 발생했습니다.',
+        duration: 3000
+      });
+    }
   };
 
   // 관리자 이메일인지 확인
@@ -167,8 +195,20 @@ const SidePopUp = ({ visible, onClose, onLogout, userName, email }) => {
                 <Button block fill='outline' shape='rounded' color='primary' onClick={() => {
                   navigate('/calorie-admin');
                   onClose();
-                }}>
+                }} style={{ marginBottom: '12px' }}>
                   <Space align='center'><LoopOutline /><span style={{ fontFamily: 'Pretendard-600' }}>칼로리 편차 관리</span></Space>
+                </Button>
+              )}
+              {isAdmin && (
+                <Button 
+                  block 
+                  fill='outline' 
+                  shape='rounded' 
+                  color='warning' 
+                  onClick={handleSurveyActivation}
+                  loading={surveyLoading}
+                >
+                  <Space align='center'><span style={{ fontFamily: 'Pretendard-600' }}>설문조사 실행</span></Space>
                 </Button>
               )}
             </div>

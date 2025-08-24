@@ -7,6 +7,7 @@ import { useFood } from '@/hook/useFood';
 import { useModal } from '@/hook/useModal';
 import { setMealFlags, updateMealFlag } from '@/redux/actions/mealActions';
 import { getMealFlags, updateMealFlag as updateMealFlagAPI } from '@/api/api';
+import SurveyModal from '../components/common/SurveyModal';
 import { 
   CheckCircleTwoTone, 
   ClockCircleOutlined, 
@@ -14,6 +15,7 @@ import {
   FireOutlined,
   HistoryOutlined,
   MinusCircleOutlined,
+  FormOutlined,
 } from '@ant-design/icons';
 
 const { Text, Title } = Typography;
@@ -31,6 +33,7 @@ const Main = () => {
     snack: false,
   });
   const [currentTimeCategory, setCurrentTimeCategory] = useState('');
+  const [surveyModalVisible, setSurveyModalVisible] = useState(false);
   const navigate = useNavigate();
 
   const { showModal, showAutoModal, isModalAvailable, isAutoModalAvailable } = useModal(foodData);
@@ -241,7 +244,21 @@ const Main = () => {
               현재 시간대: {currentTimeCategory}
             </Text>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div 
+              onClick={() => setSurveyModalVisible(true)}
+              style={{ 
+                cursor: 'pointer',
+                padding: '8px',
+                background: '#f0f9ff',
+                borderRadius: '50%',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center'
+              }}
+            >
+              <FormOutlined style={{ fontSize: '24px', color: '#1890ff' }} />
+            </div>
             <div 
               onClick={showModal}
               style={{ 
@@ -371,6 +388,13 @@ const Main = () => {
           />
         </Col>
       </Row>
+      
+      {/* 설문조사 모달 */}
+      <SurveyModal 
+        visible={surveyModalVisible}
+        onClose={() => setSurveyModalVisible(false)}
+        uid={uid}
+      />
     </div>
   );
 };

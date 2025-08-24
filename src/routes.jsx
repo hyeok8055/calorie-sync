@@ -11,6 +11,7 @@ import Intro from "./pages/auth/Intro";
 import QnA from "./pages/QnA/qna";
 import AdminPage from "./pages/auth/AdminPage";
 import CalorieAdminPage from "./pages/auth/CalorieAdminPage";
+import SurveyPage from "./pages/SurveyPage";
 
 const AppRoutes = () => {
   const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
@@ -35,6 +36,7 @@ const AppRoutes = () => {
           <Route path="/qna" element={<QnA />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/calorie-admin" element={<CalorieAdminPage />} />
+          <Route path="/survey" element={<SurveyPage />} />
           <Route path="*" element={<Navigate to="/main" />} />
         </>
       ) : (

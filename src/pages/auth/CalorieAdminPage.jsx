@@ -330,6 +330,16 @@ const CalorieAdminPage = () => {
   // 사용자 설정 저장
   const handleSaveUserSettings = async (values) => {
     if (!currentUser) return;
+    
+    // 그룹 유효성 검사
+    const isValidGroup = values.group === DEFAULT_GROUP_VALUE || 
+                        groups.some(g => g.name === values.group && !g.isDefault);
+    
+    if (!isValidGroup) {
+      message.error('유효하지 않은 그룹입니다. 기본 그룹으로 설정됩니다.');
+      values.group = DEFAULT_GROUP_VALUE;
+    }
+    
     try {
       const userRef = doc(db, 'users', currentUser.key);
       await updateDoc(userRef, {
@@ -446,6 +456,15 @@ const CalorieAdminPage = () => {
       return;
     }
     
+    // 대상 그룹 유효성 검사
+    const isValidTargetGroup = targetGroupForAddingUser.isDefault || 
+                              groups.some(g => g.id === targetGroupForAddingUser.id && !g.isDefault);
+    
+    if (!isValidTargetGroup) {
+      message.error('유효하지 않은 대상 그룹입니다.');
+      return;
+    }
+    
     const targetGroupValue = targetGroupForAddingUser.isDefault
       ? DEFAULT_GROUP_VALUE
       : targetGroupForAddingUser.name;
@@ -505,6 +524,16 @@ const CalorieAdminPage = () => {
         message.warning('추가할 사용자를 선택하세요.');
         return;
     }
+    
+    // 대상 그룹 유효성 검사
+    const isValidTargetGroup = targetGroupForAddingUser.isDefault || 
+                              groups.some(g => g.id === targetGroupForAddingUser.id && !g.isDefault);
+    
+    if (!isValidTargetGroup) {
+      message.error('유효하지 않은 대상 그룹입니다.');
+      return;
+    }
+    
     const targetGroupValue = targetGroupForAddingUser.isDefault
         ? DEFAULT_GROUP_VALUE
         : targetGroupForAddingUser.name;
@@ -933,6 +962,16 @@ const CalorieAdminPage = () => {
         message.error('편차를 적용할 날짜와 식사 유형을 선택하세요.');
         return;
     }
+    
+    // 그룹 유효성 검사
+    const isValidGroup = groupKeyOrId === DEFAULT_GROUP_VALUE || 
+                        groups.some(g => g.name === groupKeyOrId && !g.isDefault);
+    
+    if (!isValidGroup) {
+      message.error('유효하지 않은 그룹입니다.');
+      return;
+    }
+    
     try {
       setLoadingUsers(true);
       const groupUsers = users.filter(user => user.group === groupKeyOrId);

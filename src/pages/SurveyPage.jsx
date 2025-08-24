@@ -1,0 +1,645 @@
+import React, { useState, useEffect } from 'react';
+import { Form, Input, Radio, Button, Card, NavBar, Toast, TextArea } from 'antd-mobile';
+import { useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { db } from '../firebaseconfig';
+import { collection, addDoc, serverTimestamp, query, where, getDocs, setDoc, doc, getDoc } from 'firebase/firestore';
+import { useFood } from '../hook/useFood';
+
+const SurveyPage = () => {
+  const navigate = useNavigate();
+  const uid = useSelector((state) => state.auth.user?.uid);
+  const user = useSelector((state) => state.auth.user);
+  const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
+  const { foodData } = useFood();
+  const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
+  const [q6Answer, setQ6Answer] = useState(null);
+  const [q6ScaleValue, setQ6ScaleValue] = useState(null);
+  const [q6SimpleValue, setQ6SimpleValue] = useState(null);
+  const [showQ6Follow, setShowQ6Follow] = useState(false);
+  const [currentStep, setCurrentStep] = useState(1);
+  const totalSteps = 6;
+  const [lunchCalorieDifference, setLunchCalorieDifference] = useState(null);
+  const [alreadySubmitted, setAlreadySubmitted] = useState(false);
+  const [checkingSubmission, setCheckingSubmission] = useState(true);
+
+  // 점심 칼로리 편차 계산
+  useEffect(() => {
+    if (foodData && foodData.lunch) {
+      const lunch = foodData.lunch;
+      console.log(lunch)
+      if (lunch.actualCalories !== null && lunch.actualCalories !== undefined && 
+          lunch.estimatedCalories !== null && lunch.estimatedCalories !== undefined) {
+        // offset 반영하여 실제 칼로리 계산
+        const actualCaloriesWithOffset = lunch.actualCalories + (lunch.offset || 0);
+        const difference = lunch.estimatedCalories - actualCaloriesWithOffset;
+        console.log('Calorie difference (with offset):', difference)
+        
+        // 편차가 양수일 때만 표시 (예상보다 적게 섭취한 경우)
+        // 실제 섭취 칼로리가 예측 칼로리보다 높은 경우에는 6번 질문 숨김
+        if (difference > 0) {
+          setLunchCalorieDifference(Math.round(difference));
+        } else {
+          setLunchCalorieDifference(0);
+        }
+      }
+    }
+  }, [foodData]);
+
+  // 시간 제한 상태 확인
+  const [timeRestricted, setTimeRestricted] = useState(false);
+  
+  // 시간 제한 확인 (매일 밤 9시부터 기록 가능)
+  useEffect(() => {
+    const now = new Date();
+    const currentHour = now.getHours();
+    
+    // // 오후 9시(21시) 이전에는 접근 불가
+    // if (currentHour < 21) {
+    //   setTimeRestricted(true);
+    //   Toast.show({
+    //     content: '설문조사는 매일 밤 9시부터 작성 가능합니다.',
+    //     position: 'top',
+    //     duration: 3000
+    //   });
+    //   setTimeout(() => navigate('/'), 3000);
+    // }
+  }, [navigate]);
+
+  // 오늘 설문 제출 여부 확인
+  useEffect(() => {
+    const checkTodaySubmission = async () => {
+      if (!uid) {
+        setCheckingSubmission(false);
+        return;
+      }
+
+      try {
+        // 현재 활성화된 설문조사 ID 가져오기
+        const surveyDoc = await getDoc(doc(db, 'system', 'survey'));
+        let surveyId = 'default-survey'; // 기본값
+        
+        if (surveyDoc.exists() && surveyDoc.data().surveyId) {
+          surveyId = surveyDoc.data().surveyId;
+        }
+
+        // 해당 설문조사에 대한 사용자 응답 확인: surveys/{surveyId}/{userId}
+        const userResponseDoc = await getDoc(doc(db, 'surveys', surveyId, 'responses', uid));
+        
+        if (userResponseDoc.exists()) {
+          const responseData = userResponseDoc.data();
+          const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD 형식
+          const responseDate = responseData.timestamp ? responseData.timestamp.split('T')[0] : null;
+          
+          // 오늘 날짜에 제출한 응답이 있는지 확인
+          if (responseDate === today) {
+            setAlreadySubmitted(true);
+            Toast.show({
+              content: '오늘 이미 설문조사를 완료하셨습니다.',
+              position: 'top',
+              duration: 3000
+            });
+            setTimeout(() => navigate('/'), 3000);
+          }
+        }
+      } catch (error) {
+        console.error('설문 제출 여부 확인 오류:', error);
+      } finally {
+        setCheckingSubmission(false);
+      }
+    };
+
+    if (isAuthenticated && uid) {
+      checkTodaySubmission();
+    }
+  }, [uid, isAuthenticated, navigate]);
+
+  // 인증되지 않은 사용자 리다이렉트
+  useEffect(() => {
+    if (!isAuthenticated || !uid) {
+      Toast.show({
+        content: '로그인이 필요합니다.',
+        position: 'top'
+      });
+      navigate('/');
+    }
+  }, [isAuthenticated, uid, navigate]);
+
+  // Q6 답변 변경 시 추가 질문 표시 여부 결정
+  const handleQ6Change = (value, type) => {
+    if (type === 'scale') {
+      // 척도를 선택했으므로 간단 선택 해제
+      setQ6ScaleValue(value);
+      setQ6SimpleValue(null);
+      setQ6Answer(value);
+      form.setFieldsValue({ q6_less_intake_reaction: value });
+    } else if (type === 'simple') {
+      // 간단 선택을 했으므로 척도 선택 해제
+      setQ6SimpleValue(value);
+      setQ6ScaleValue(null);
+      setQ6Answer(value);
+      form.setFieldsValue({ q6_less_intake_reaction: value });
+    }
+    
+    // 추가 질문 표시 여부 결정
+    setShowQ6Follow(value === 'no' || (typeof value === 'number' && value <= 3));
+  };
+
+  // 설문 제출 처리
+  const handleSubmit = async (values) => {
+    if (!uid || !user) {
+      Toast.show({
+        content: '로그인이 필요합니다.',
+        position: 'top'
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // 현재 활성화된 설문조사 ID 가져오기
+      const surveyDoc = await getDoc(doc(db, 'system', 'survey'));
+      let surveyId = 'default-survey'; // 기본값
+      
+      if (surveyDoc.exists() && surveyDoc.data().surveyId) {
+        surveyId = surveyDoc.data().surveyId;
+      }
+
+      const surveyData = {
+        userId: uid,
+        userEmail: user.email,
+        q1_daily_calories: values.q1_daily_calories,
+        q2_on_diet: values.q2_on_diet,
+        q3_weight_control_motivation: values.q3_weight_control_motivation,
+        q4_forbidden_food_behavior: values.q4_forbidden_food_behavior,
+        q5_food_consciousness: values.q5_food_consciousness,
+        q6_less_intake_reaction: lunchCalorieDifference > 0 ? values.q6_less_intake_reaction : null,
+        q6_follow_up: (lunchCalorieDifference > 0 && showQ6Follow) ? values.q6_follow_up : null,
+        submittedAt: serverTimestamp(),
+        timestamp: new Date().toISOString()
+      };
+
+      // 올바른 구조로 저장: surveys/{surveyId}/responses/{userId}
+      await setDoc(doc(db, 'surveys', surveyId, 'responses', uid), surveyData);
+      
+      Toast.show({
+        content: '설문조사가 성공적으로 제출되었습니다!',
+        position: 'top',
+        duration: 2000
+      });
+      
+      setTimeout(() => {
+        navigate('/main');
+      }, 2000);
+    } catch (error) {
+      console.error('설문 제출 오류:', error);
+      Toast.show({
+        content: '설문 제출 중 오류가 발생했습니다.',
+        position: 'top'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 리커트 척도 컴포넌트
+  const LikertScale = ({ value, onChange, options, name }) => {
+    return (
+      <div className="likert-scale">
+        <div className="flex justify-between items-center mb-3 px-1">
+          <span className="text-xs text-gray-500 max-w-[45%] text-left leading-tight">
+            {options[0]}
+          </span>
+          <span className="text-xs text-gray-500 max-w-[45%] text-right leading-tight">
+            {options[options.length - 1]}
+          </span>
+        </div>
+        <div className="flex justify-between items-center gap-1 sm:gap-2 pt-1">
+          {options.map((_, index) => {
+            const scaleValue = index + 1;
+            return (
+              <div key={scaleValue} className="flex flex-col items-center flex-1">
+                <button
+                  type="button"
+                  onClick={() => onChange(scaleValue)}
+                  className={`w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-full border-2 transition-all duration-200 text-sm sm:text-base ${
+                    value === scaleValue
+                      ? 'bg-blue-500 border-blue-500 text-white shadow-lg scale-110'
+                      : 'bg-white border-gray-300 text-gray-600 hover:border-blue-300 hover:bg-blue-50'
+                  }`}
+                >
+                  {scaleValue}
+                </button>
+                {/* <span className="text-xs text-gray-400 mt-1">{scaleValue}</span> */}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // 로딩 중이거나 이미 제출된 경우 또는 시간 제한된 경우 처리
+  if (checkingSubmission) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-lg font-semibold text-gray-700 mb-2">설문 상태 확인 중...</div>
+          <div className="text-sm text-gray-500">잠시만 기다려주세요.</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (timeRestricted) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center">
+        <div className="text-center p-6">
+          <div className="text-2xl mb-4">🕘</div>
+          <div className="text-lg font-semibold text-gray-700 mb-2">설문조사 시간이 아닙니다</div>
+          <div className="text-sm text-gray-500">매일 밤 9시부터 작성 가능합니다</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (alreadySubmitted) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center">
+        <div className="text-center p-6">
+          <div className="text-2xl mb-4">✅</div>
+          <div className="text-lg font-semibold text-gray-700 mb-2">오늘 설문조사를 이미 완료하셨습니다</div>
+          <div className="text-sm text-gray-500">내일 다시 참여해 주세요!</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="survey-page min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
+      {/* 네비게이션 바 */}
+      <NavBar
+        className="bg-white/90 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-50"
+      >
+        <div className="flex flex-col items-center">
+          <span className="text-lg font-bold text-gray-800">📊 설문조사</span>
+          {/* <div className="w-full max-w-xs mt-2">
+            <div className="w-full bg-gray-200 rounded-full h-1.5">
+              <div 
+                className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+                style={{ width: `${progressPercentage}%` }}
+              ></div>
+            </div>
+            <div className="text-xs text-gray-500 mt-1 text-center">
+              {currentStep} / {totalSteps}
+            </div>
+          </div> */}
+        </div>
+      </NavBar>
+
+      {/* 메인 콘텐츠 */}
+      <div className="p-2 pb-10 max-w-2xl mx-auto">
+        <div className="mt-2 mb-3 text-center">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2">
+            여러분의 소중한 의견을 들려주세요
+          </h1>
+          <p className="text-sm text-gray-600">
+            모든 질문에 답변해 주시면 감사하겠습니다
+          </p>
+        </div>
+
+        <Form
+          form={form}
+          onFinish={handleSubmit}
+          layout="vertical"
+          className="space-y-4 sm:space-y-6"
+        >
+          {/* Q1: 하루 칼로리 섭취량 */}
+          <Card className="bg-white rounded-xl shadow-sm border-0 overflow-hidden">
+            <div className="p-2 sm:p-5">
+              <div className="flex items-center mb-3">
+                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-1">
+                  <span className="text-blue-600 font-semibold text-sm">1</span>
+                </div>
+                <h3 className="text-base sm:text-lg font-semibold text-gray-800">
+                  번 질문
+                </h3>
+              </div>
+              <p className="text-sm sm:text-base text-gray-600 mb-3 pl-4">
+                보통 하루에 몇 칼로리를 섭취하시나요?
+              </p>
+              <Form.Item
+                name="q1_daily_calories"
+                rules={[{ required: true, message: '칼로리를 입력해 주세요' }]}
+              >
+                <div className="relative">
+                  <Input
+                    type="number"
+                    placeholder="예: 2000"
+                    className="text-base sm:text-lg py-3 px-4 rounded-lg border-2 border-gray-200 focus:border-blue-400 transition-colors"
+                    onFocus={() => setCurrentStep(1)}
+                  />
+                  <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 font-medium text-sm sm:text-base">
+                    kcal
+                  </span>
+                </div>
+              </Form.Item>
+            </div>
+          </Card>
+
+          {/* Q2: 다이어트 여부 */}
+          <Card className="bg-white rounded-xl shadow-sm border-0 overflow-hidden">
+            <div className="p-2 sm:p-5">
+              <div className="flex items-center mb-3">
+                <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center mr-1">
+                  <span className="text-green-600 font-semibold text-sm">2</span>
+                </div>
+                <h3 className="text-base sm:text-lg font-semibold text-gray-800">
+                  번 질문
+                </h3>
+              </div>
+              <p className="text-sm sm:text-base text-gray-600 mb-3 pl-4">
+                현재 다이어트를 하고 계신가요?
+              </p>
+              <Form.Item
+                name="q2_on_diet"
+                rules={[{ required: true, message: '선택해 주세요' }]}
+              >
+                <Radio.Group className="w-full" onChange={() => setCurrentStep(2)}>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="flex items-center p-3 sm:p-2 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 transition-colors">
+                      <Radio value="yes" className="mr-3" />
+                      <span className="text-sm sm:text-base text-gray-700 font-medium">예</span>
+                    </label>
+                    <label className="flex items-center p-3 sm:p-2 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 transition-colors">
+                      <Radio value="no" className="mr-3" />
+                      <span className="text-sm sm:text-base text-gray-700 font-medium">아니오</span>
+                    </label>
+                  </div>
+                </Radio.Group>
+              </Form.Item>
+            </div>
+          </Card>
+
+          {/* Q3: 체중 조절 동기 수준 (4점 척도) */}
+          <Card className="bg-white rounded-xl shadow-sm border-0 overflow-hidden">
+            <div className="p-2 sm:p-5">
+              <div className="flex items-center mb-3">
+                <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-1">
+                  <span className="text-purple-600 font-semibold text-sm">3</span>
+                </div>
+                <h3 className="text-base sm:text-lg font-semibold text-gray-800">
+                  번 질문
+                </h3>
+              </div>
+              <p className="text-sm sm:text-base text-gray-600 mb-6 pl-2">
+                평소 체중을 조절하려는 동기가 얼마나 높으신가요?
+              </p>
+              <Form.Item
+                name="q3_weight_control_motivation"
+                rules={[{ required: true, message: '선택해 주세요' }]}
+              >
+                <LikertScale
+                  value={form.getFieldValue('q3_weight_control_motivation')}
+                  onChange={(value) => {
+                    form.setFieldsValue({ q3_weight_control_motivation: value });
+                    setCurrentStep(3);
+                  }}
+                  options={[
+                    '동기부여가 없음',
+                    '조금 있음',
+                    '보통',
+                    '중시 여김'
+                  ]}
+                  name="q3_weight_control_motivation"
+                />
+              </Form.Item>
+            </div>
+          </Card>
+
+          {/* Q4: 금지된 음식 섭취 후 행동 */}
+          <Card className="bg-white rounded-xl shadow-sm border-0 overflow-hidden">
+            <div className="p-2 sm:p-5">
+              <div className="flex items-center mb-3">
+                <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center mr-1">
+                  <span className="text-red-600 font-semibold text-sm">4</span>
+                </div>
+                <h3 className="text-base sm:text-lg font-semibold text-gray-800">
+                  번 질문
+                </h3>
+              </div>
+              <p className="text-sm sm:text-base text-gray-600 mb-3 pl-4">
+                다이어트를 하는 동안 '금지된' 음식을 섭취한 후,<br/> 보통 어떤 행동을 하십니까?
+              </p>
+              <Form.Item
+                name="q4_forbidden_food_behavior"
+                rules={[{ required: true, message: '선택해 주세요' }]}
+              >
+                <Radio.Group className="w-full" onChange={() => setCurrentStep(4)}>
+                  <div className="space-y-3">
+                    <label className="flex items-start p-3 sm:p-2 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 transition-colors">
+                      <Radio value={1} className="mt-1 mr-3" />
+                      <span className="text-sm sm:text-base text-gray-700">
+                        다시 식단으로 돌아간다
+                      </span>
+                    </label>
+                    <label className="flex items-start p-3 sm:p-2 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 transition-colors">
+                      <Radio value={2} className="mt-1 mr-3" />
+                      <span className="text-sm sm:text-base text-gray-700">
+                        보상하기 위해 오랜 시간 동안 식사를 중단한다
+                      </span>
+                    </label>
+                    <label className="flex items-start p-3 sm:p-2 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 transition-colors">
+                      <Radio value={3} className="mt-1 mr-3" />
+                      <span className="text-sm sm:text-base text-gray-700">
+                        계속해서 과식한다
+                      </span>
+                    </label>
+                    <label className="flex items-start p-3 sm:p-2 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 transition-colors">
+                      <Radio value={4} className="mt-1 mr-3" />
+                      <span className="text-sm sm:text-base text-gray-700">
+                        다른 '금지된' 음식도 먹는다
+                      </span>
+                    </label>
+                  </div>
+                </Radio.Group>
+              </Form.Item>
+            </div>
+          </Card>
+
+          {/* Q5: 음식 섭취 의식 정도 (4점 척도) */}
+          <Card className="bg-white rounded-xl shadow-sm border-0 overflow-hidden">
+            <div className="p-2 sm:p-5">
+              <div className="flex items-center mb-3">
+                <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center mr-1">
+                  <span className="text-orange-600 font-semibold text-sm">5</span>
+                </div>
+                <h3 className="text-base sm:text-lg font-semibold text-gray-800">
+                  번 질문
+                </h3>
+              </div>
+              <p className="text-sm sm:text-base text-gray-600 mb-6 pl-4">
+                체중을 조절할 때, 본인이 먹는 음식에 대해<br/> 얼마나 의식하고 있습니까?
+              </p>
+              <Form.Item
+                name="q5_food_consciousness"
+                rules={[{ required: true, message: '선택해 주세요' }]}
+              >
+                <LikertScale
+                  value={form.getFieldValue('q5_food_consciousness')}
+                  onChange={(value) => {
+                    form.setFieldsValue({ q5_food_consciousness: value });
+                    setCurrentStep(5);
+                  }}
+                  options={[
+                    '전혀 의식하지 않음',
+                    '조금 의식함',
+                    '적당히 의식함',
+                    '매우 의식함'
+                  ]}
+                  name="q5_food_consciousness"
+                />
+              </Form.Item>
+            </div>
+          </Card>
+
+          {/* Q6: 예상보다 적게 섭취한 것에 대한 반응 - 조건부 표시 */}
+          {lunchCalorieDifference > 0 && (
+          <Card className="bg-white rounded-xl shadow-sm border-0 overflow-hidden">
+            <div className="p-2 sm:p-5">
+              <div className="flex items-center mb-3">
+                <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center mr-1">
+                  <span className="text-indigo-600 font-semibold text-sm">6</span>
+                </div>
+                <h3 className="text-base sm:text-lg font-semibold text-gray-800">
+                  번 질문
+                </h3>
+              </div>
+              <p className="text-sm sm:text-base text-gray-600 mb-6 pl-4">
+                오늘 점심에 예상보다 <span className="font-bold text-md text-blue-600 bg-blue-50 px-2 py-1 rounded-md">{lunchCalorieDifference || 0}</span> 칼로리를<br/> 적게 섭취하였습니다.
+                <br/>이 사실이 얼마나 놀라웠나요?
+              </p>
+              <Form.Item
+                name="q6_less_intake_reaction"
+                rules={lunchCalorieDifference > 0 ? [{ required: true, message: '선택해 주세요' }] : []}
+              >
+                <div className="space-y-6">
+                  {/* 7점 척도 */}
+                  <div>
+                    <div className="bg-gray-50 p-3 sm:p-2 rounded-lg">
+                      <LikertScale
+                        key={`likert-${q6ScaleValue || 'none'}`}
+                        value={q6ScaleValue}
+                        onChange={(value) => {
+                          handleQ6Change(value, 'scale');
+                          setCurrentStep(6);
+                        }}
+                        options={[
+                          '전혀 놀랍지 않음',
+                          '2',
+                          '3',
+                          '4',
+                          '5',
+                          '6',
+                          '많이 놀라움'
+                        ]}
+                        name="q6_scale"
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* 또는 예/아니오 */}
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-700 mb-3">
+                      또는 간단히 선택해주세요
+                    </h4>
+                    <Radio.Group 
+                      key={`radio-${q6SimpleValue || 'none'}`}
+                      value={q6SimpleValue}
+                      onChange={(e) => {
+                        handleQ6Change(e.target.value, 'simple');
+                        setCurrentStep(6);
+                      }}
+                      className="w-full"
+                    >
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="flex items-center p-3 sm:p-2 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 transition-colors">
+                          <Radio value="yes" className="mr-3" />
+                          <span className="text-sm sm:text-base text-gray-700 font-medium">예</span>
+                        </label>
+                        <label className="flex items-center p-3 sm:p-2 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 transition-colors">
+                          <Radio value="no" className="mr-3" />
+                          <span className="text-sm sm:text-base text-gray-700 font-medium">아니오</span>
+                        </label>
+                      </div>
+                    </Radio.Group>
+                  </div>
+                </div>
+              </Form.Item>
+            </div>
+          </Card>
+          )}
+
+          {/* Q6 추가 질문 (조건부 노출) */}
+          {lunchCalorieDifference > 0 && showQ6Follow && (
+            <Card className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl shadow-sm border border-yellow-200 overflow-hidden">
+              <div className="p-2 sm:p-5">
+                <div className="flex items-center mb-3">
+                  <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center mr-3">
+                    <span className="text-yellow-600 font-semibold text-sm">💭</span>
+                  </div>
+                  <h3 className="text-base sm:text-lg font-semibold text-gray-800">
+                    추가 질문
+                  </h3>
+                </div>
+                <p className="text-sm sm:text-base text-gray-600 mb-3">
+                  칼로리를 예상보다 적게 섭취한 것이 왜 횡재처럼 느껴지지 않았는지 설명해주시면 감사하겠습니다
+                </p>
+                <Form.Item
+                  name="q6_follow_up"
+                  rules={[{ required: true, message: '설명을 입력해 주세요' }]}
+                >
+                  <TextArea
+                    placeholder="자유롭게 설명해 주세요..."
+                    rows={4}
+                    maxLength={500}
+                    showCount
+                    className="text-sm sm:text-base p-3 sm:p-2 rounded-lg border-2 border-gray-200 focus:border-yellow-400 transition-colors resize-none"
+                  />
+                </Form.Item>
+              </div>
+            </Card>
+          )}
+        </Form>
+      </div>
+
+      {/* 고정 하단 버튼 */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-t border-gray-200 p-2 z-40">
+        <div className="max-w-2xl mx-auto space-y-3">
+          <Button
+            type="primary"
+            loading={loading}
+            block
+            size="large"
+            className="h-12 sm:h-14 text-base sm:text-lg font-semibold bg-gradient-to-r from-blue-500 to-indigo-600 border-0 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
+            onClick={() => form.submit()}
+          >
+            {loading ? (
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-4 w-4 sm:h-5 sm:w-5 border-b-2 border-white mr-2"></div>
+                제출 중...
+              </div>
+            ) : (
+              <div className="flex items-center justify-center">
+                설문 제출하기
+              </div>
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default SurveyPage;
