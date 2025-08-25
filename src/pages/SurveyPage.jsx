@@ -12,8 +12,8 @@ const SurveyPage = () => {
   const uid = useSelector((state) => state.auth.user?.uid);
   const user = useSelector((state) => state.auth.user);
   const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
-  const { foodData } = useFood();
-  const { calculateFinalDifference } = useCalorieDeviation();
+  const { foodData, calculateCalorieOffset } = useFood();
+  const { getGroupDeviationSettings, getPersonalCalorieBias, getUserGroupId } = useCalorieDeviation();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [q6Answer, setQ6Answer] = useState(null);
@@ -28,27 +28,61 @@ const SurveyPage = () => {
 
   // 점심 칼로리 편차 계산
   useEffect(() => {
-    if (foodData && foodData.lunch) {
-      const lunch = foodData.lunch;
-      console.log(lunch)
-      if (lunch.actualCalories !== null && lunch.actualCalories !== undefined && 
-          lunch.estimatedCalories !== null && lunch.estimatedCalories !== undefined) {
-        // 새로운 훅을 사용하여 최종 차이 계산
-        const finalDifference = calculateFinalDifference(lunch, 0);
-        // 예상보다 적게 섭취한 경우를 위해 부호 반전
-        const difference = -finalDifference;
-        console.log('Calorie difference (with applied deviation):', difference)
-        
-        // 편차가 양수일 때만 표시 (예상보다 적게 섭취한 경우)
-        // 실제 섭취 칼로리가 예측 칼로리보다 높은 경우에는 6번 질문 숨김
-        if (difference > 0) {
-          setLunchCalorieDifference(Math.round(difference));
-        } else {
-          setLunchCalorieDifference(0);
+    const calculateLunchDifference = async () => {
+      if (foodData && foodData.lunch) {
+        const lunch = foodData.lunch;
+        console.log(lunch)
+        if (lunch.actualCalories !== null && lunch.actualCalories !== undefined && 
+            lunch.estimatedCalories !== null && lunch.estimatedCalories !== undefined) {
+          try {
+            // 그룹 설정과 개인 편향값 가져오기
+            const groupId = await getUserGroupId(uid);
+            const groupSettings = await getGroupDeviationSettings(groupId);
+            const personalBias = await getPersonalCalorieBias(uid);
+            
+            // 그룹편차 적용 여부 확인
+            const hasGroupDeviation = groupSettings && (
+              groupSettings.multiplier !== 1 || 
+              groupSettings.defaultDeviation !== 0
+            );
+            
+            if (hasGroupDeviation) {
+              // 그룹편차가 적용된 사용자의 경우
+              // 부호 전환으로 인해 값이 무조건 음수로 고정되므로 항상 6번 문항 입력 대상
+              const offset = calculateCalorieOffset(
+                lunch.estimatedCalories, 
+                lunch.actualCalories, 
+                groupSettings, 
+                personalBias
+              );
+              const difference = -offset; // 부호 반전
+              console.log('Calorie difference (group deviation applied):', difference);
+              
+              // 그룹편차 적용 사용자는 항상 6번 문항 대상 (양수 값으로 설정)
+              setLunchCalorieDifference(Math.abs(difference) || 1);
+            } else {
+              // 일반 사용자의 경우
+              // 실제 섭취 칼로리 - 예측 칼로리로 직접 비교
+              const rawDifference = lunch.estimatedCalories - lunch.actualCalories;
+              console.log('Calorie difference (normal user):', rawDifference);
+              
+              // 예상보다 적게 섭취한 경우(rawDifference > 0)만 6번 문항 입력 대상
+              if (rawDifference > 0) {
+                setLunchCalorieDifference(Math.round(rawDifference));
+              } else {
+                setLunchCalorieDifference(0);
+              }
+            }
+          } catch (error) {
+            console.error('편차 계산 중 오류:', error);
+            setLunchCalorieDifference(0);
+          }
         }
       }
-    }
-  }, [foodData, calculateFinalDifference]);
+    };
+    
+    calculateLunchDifference();
+  }, [foodData, calculateCalorieOffset, getUserGroupId, getGroupDeviationSettings, getPersonalCalorieBias, uid]);
 
   // 시간 제한 상태 확인
   const [timeRestricted, setTimeRestricted] = useState(false);
@@ -145,7 +179,7 @@ const SurveyPage = () => {
       form.setFieldsValue({ q6_less_intake_reaction: value });
     }
     
-    // 추가 질문 표시 여부 결정
+    // 추가 질문 표시 여부 결정 (7점 척도에 맞게 조정)
     setShowQ6Follow(value === 'no' || (typeof value === 'number' && value <= 3));
   };
 
@@ -410,10 +444,13 @@ const SurveyPage = () => {
                     setCurrentStep(3);
                   }}
                   options={[
-                    '동기부여가 없음',
-                    '조금 있음',
+                    '전혀 없음',
+                    '매우 낮음',
+                    '낮음',
                     '보통',
-                    '중시 여김'
+                    '높음',
+                    '매우 높음',
+                    '극도로 높음'
                   ]}
                   name="q3_weight_control_motivation"
                 />
@@ -497,8 +534,11 @@ const SurveyPage = () => {
                   }}
                   options={[
                     '전혀 의식하지 않음',
+                    '거의 의식하지 않음',
                     '조금 의식함',
+                    '보통 의식함',
                     '적당히 의식함',
+                    '많이 의식함',
                     '매우 의식함'
                   ]}
                   name="q5_food_consciousness"

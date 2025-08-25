@@ -695,5 +695,5 @@ export const useFood = () => {
     }
   }, [getGroupDeviationSettings, getPersonalCalorieBias]);
 
-  return { loading, error, foodData, saveFoodData, fetchFoodDetails, applyGroupDeviation };
+  return { loading, error, foodData, saveFoodData, fetchFoodDetails, applyGroupDeviation, calculateCalorieOffset };
 };

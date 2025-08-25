@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Typography, Input, Row, Col, Button, Modal, Form, Table, InputNumber, message, Select, Card, Tabs, Tag, Space, Tooltip, Divider, Switch, ColorPicker, Transfer, Skeleton, Empty, DatePicker, Slider, Radio, Popover, Steps, Alert } from 'antd';
-import { db } from '../../firebaseconfig';
+import { Typography, Input, Row, Col, Button, Modal, Form, Table, InputNumber, message, Select, Card, Tabs, Tag, Space, Tooltip, Divider, Switch, ColorPicker, Transfer, Skeleton, Empty, DatePicker, Slider, Radio, Popover, Steps, Alert, Progress } from 'antd';
+import { db, auth } from '../../firebaseconfig';
 import { collection, getDocs, doc, getDoc, updateDoc, setDoc, query, where, addDoc, deleteDoc, Timestamp, writeBatch } from 'firebase/firestore';
 import { useSelector } from 'react-redux';
 import { useNavigate } from "react-router-dom";
 import { useMediaQuery } from 'react-responsive';
-import { SyncOutlined, ExclamationCircleOutlined, UserOutlined, TeamOutlined, EditOutlined, SaveOutlined, UndoOutlined, PlusOutlined, DeleteOutlined, UserAddOutlined, CalendarOutlined, CoffeeOutlined, InfoCircleOutlined, QuestionCircleOutlined } from '@ant-design/icons';
+import { SyncOutlined, ExclamationCircleOutlined, UserOutlined, TeamOutlined, EditOutlined, SaveOutlined, UndoOutlined, PlusOutlined, DeleteOutlined, UserAddOutlined, CalendarOutlined, CoffeeOutlined, InfoCircleOutlined, QuestionCircleOutlined, DownloadOutlined, DatabaseOutlined } from '@ant-design/icons';
 import { Shuffle } from 'lucide-react';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
@@ -19,6 +19,7 @@ const { Text, Title } = Typography;
 const { Search } = Input;
 const { Option } = Select;
 const { TabPane } = Tabs;
+const { RangePicker } = DatePicker;
 const { confirm } = Modal;
 
 // 관리자 접근 가능한 이메일 목록 (AdminPage.jsx와 동일)
@@ -114,6 +115,15 @@ const CalorieAdminPage = () => {
   
   // 도움말 상태
   const [showHelp, setShowHelp] = useState(false);
+
+  // 데이터 반출 관련 상태
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportDateRange, setExportDateRange] = useState([dayjs().subtract(7, 'day'), dayjs()]);
+  const [exportProgress, setExportProgress] = useState(0);
+  const [exportTotal, setExportTotal] = useState(0);
+  const [exportBatchSize, setExportBatchSize] = useState(10);
+  const [exportDelay, setExportDelay] = useState(100);
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
 
   // 권한 체크
   useEffect(() => {
@@ -1110,6 +1120,88 @@ const CalorieAdminPage = () => {
   // 기존 함수명 호환성을 위한 별칭
   const applyGroupCalorieBias = handleApplyGroupDeviation;
 
+  // 데이터 반출 함수 (Cloud Function 사용)
+  const handleExportData = async () => {
+    if (!exportDateRange || exportDateRange.length !== 2) {
+      message.error('날짜 범위를 선택해주세요.');
+      return;
+    }
+
+    setExportLoading(true);
+    setExportProgress(0);
+    setExportTotal(100); // Cloud Function 진행률은 단계별로 표시
+
+    try {
+      const startDate = exportDateRange[0].format('YYYY-MM-DD');
+      const endDate = exportDateRange[1].format('YYYY-MM-DD');
+      
+      // Firebase Auth에서 현재 사용자의 ID 토큰 가져오기
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error('인증되지 않은 사용자입니다.');
+      }
+      
+      const idToken = await user.getIdToken();
+      
+      setExportProgress(20); // 인증 완료
+      
+      // Cloud Function 호출
+      const functionUrl = process.env.NODE_ENV === 'development' 
+        ? 'http://localhost:5001/calorie-sync-dev/us-central1/exportUserData'
+        : 'https://us-central1-calorie-sync-dev.cloudfunctions.net/exportUserData';
+      
+      const response = await fetch(functionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          startDate,
+          endDate,
+          batchSize: exportBatchSize,
+          delay: exportDelay
+        })
+      });
+      
+      setExportProgress(60); // 요청 전송 완료
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}: 서버 오류`);
+      }
+      
+      const result = await response.json();
+      
+      setExportProgress(80); // 응답 수신 완료
+      
+      if (!result.success) {
+        throw new Error(result.error || '데이터 반출에 실패했습니다.');
+      }
+      
+      // 다운로드 URL로 파일 다운로드
+      const downloadLink = document.createElement('a');
+      downloadLink.href = result.downloadUrl;
+      downloadLink.download = `calorie_data_${startDate}_to_${endDate}.csv`;
+      downloadLink.style.visibility = 'hidden';
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      
+      setExportProgress(100); // 다운로드 완료
+      
+      message.success(`데이터 반출이 완료되었습니다. (총 ${result.recordCount}개 레코드, 처리 시간: ${result.processingTime}초)`);
+      
+    } catch (error) {
+      console.error('데이터 반출 실패:', error);
+      message.error(`데이터 반출에 실패했습니다: ${error.message}`);
+    } finally {
+      setExportLoading(false);
+      setExportProgress(0);
+      setExportTotal(0);
+    }
+  };
+
   // 개별 사용자 편차 적용 함수 (과거/미래 자동 구분)
   const handleApplyMealDeviation = async (userId, targetDate, mealType, deviation) => {
     try {
@@ -1346,6 +1438,155 @@ const CalorieAdminPage = () => {
             pagination={{ pageSize: isMobile ? 8 : 10, showSizeChanger: false, size: 'small' }}
             size={isMobile ? "small" : "middle"}
             locale={{ emptyText: <Empty description="표시할 사용자가 없습니다." /> }}
+          />
+        </TabPane>
+
+        <TabPane tab={<span><DatabaseOutlined /> 데이터 반출</span>} key="export">
+          <Row justify="space-between" align="middle" style={{ marginBottom: 16, padding: isMobile ? '0 8px' : 0 }}>
+            <Space>
+              <Text style={{ fontSize: isMobile ? '14px' : '16px' }}>전체 사용자 식사 데이터 반출</Text>
+              <Tooltip title="선택한 날짜 범위의 모든 사용자 식사 데이터를 CSV 파일로 다운로드할 수 있습니다. UID, 식사 날짜, Treatment 적용 여부, 식사 내용, 실제/예측 칼로리, 오차 정보가 포함됩니다.">
+                <InfoCircleOutlined style={{ color: '#1677ff' }} />
+              </Tooltip>
+            </Space>
+          </Row>
+          
+          <Card style={{ marginBottom: 16 }}>
+            <Row gutter={[16, 16]} align="middle">
+              <Col xs={24} md={12}>
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <Text strong>날짜 범위 선택</Text>
+                  <RangePicker
+                    value={exportDateRange}
+                    onChange={(dates) => setExportDateRange(dates)}
+                    style={{ width: '100%' }}
+                    size={isMobile ? 'small' : 'middle'}
+                    placeholder={['시작 날짜', '종료 날짜']}
+                    allowClear={false}
+                  />
+                </Space>
+              </Col>
+              <Col xs={24} md={12}>
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <Text strong>반출 실행</Text>
+                  <Button
+                    type="primary"
+                    icon={<DownloadOutlined />}
+                    onClick={handleExportData}
+                    loading={exportLoading}
+                    disabled={!exportDateRange || exportDateRange.length !== 2}
+                    size={isMobile ? 'small' : 'middle'}
+                    block={isMobile}
+                  >
+                    CSV 파일 다운로드
+                  </Button>
+                </Space>
+              </Col>
+            </Row>
+            
+            <Divider style={{ margin: '16px 0' }} />
+            
+            <Row justify="space-between" align="middle">
+              <Col>
+                <Text strong>고급 설정</Text>
+              </Col>
+              <Col>
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+                >
+                  {showAdvancedSettings ? '숨기기' : '보기'}
+                </Button>
+              </Col>
+            </Row>
+            
+            {showAdvancedSettings && (
+              <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+                <Col xs={24} md={12}>
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    <Text>배치 크기 (동시 처리 사용자 수)</Text>
+                    <Tooltip title="한 번에 처리할 사용자 수입니다. 값이 클수록 빠르지만 서버 부담이 증가합니다.">
+                      <InputNumber
+                        min={1}
+                        max={50}
+                        value={exportBatchSize}
+                        onChange={setExportBatchSize}
+                        style={{ width: '100%' }}
+                        addonAfter="명"
+                      />
+                    </Tooltip>
+                  </Space>
+                </Col>
+                <Col xs={24} md={12}>
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    <Text>배치 간 지연 시간</Text>
+                    <Tooltip title="배치 처리 간 대기 시간입니다. 값이 클수록 서버 부담이 줄어들지만 처리 시간이 증가합니다.">
+                      <InputNumber
+                        min={0}
+                        max={1000}
+                        step={50}
+                        value={exportDelay}
+                        onChange={setExportDelay}
+                        style={{ width: '100%' }}
+                        addonAfter="ms"
+                      />
+                    </Tooltip>
+                  </Space>
+                </Col>
+              </Row>
+            )}
+            
+            {exportLoading && (
+              <div style={{ marginTop: 16 }}>
+                <Text type="secondary">데이터 처리 중...</Text>
+                <Progress
+                  percent={exportTotal > 0 ? Math.round((exportProgress / exportTotal) * 100) : 0}
+                  status="active"
+                  format={() => `${exportProgress}/${exportTotal} 사용자 처리됨`}
+                  style={{ marginTop: 8 }}
+                />
+              </div>
+            )}
+          </Card>
+          
+          <Alert
+            message="데이터 반출 안내"
+            description={
+              <div>
+                <p><strong>포함 데이터:</strong></p>
+                <ul style={{ marginBottom: 8, paddingLeft: 20 }}>
+                  <li>UID: 사용자 고유 식별자</li>
+                  <li>식사 Date: 날짜 및 식사 시간 (아침/점심/저녁/간식)</li>
+                  <li>Treatment: 칼로리 편차 그룹 적용 여부 (TRUE/FALSE)</li>
+                  <li>식사내용: 섭취한 음식 목록 및 칼로리</li>
+                  <li>실제칼로리: 사용자가 입력한 실제 칼로리</li>
+                  <li>예측칼로리: 시스템이 예측한 칼로리</li>
+                  <li>오차(원본): 실제 - 예측 칼로리</li>
+                  <li>오차(Treatment 적용): Treatment 적용 후 조정된 오차</li>
+                </ul>
+                <p><strong>Cloud Function 최적화:</strong></p>
+                 <ul style={{ marginBottom: 8, paddingLeft: 20 }}>
+                   <li>서버 사이드 처리: Firebase Cloud Functions에서 데이터 처리 및 CSV 생성</li>
+                   <li>배치 처리: {exportBatchSize}명씩 묶어서 병렬 처리로 성능 최적화</li>
+                   <li>요청 간격: 배치 간 {exportDelay}ms 지연으로 Firestore 부담 완화</li>
+                   <li>Firebase Storage: 생성된 CSV 파일을 안전하게 저장 및 다운로드</li>
+                   <li>동적 설정: 고급 설정에서 배치 크기와 지연 시간 조정 가능</li>
+                 </ul>
+                <p><strong>장점:</strong> 클라이언트 부담 없이 서버에서 효율적으로 대용량 데이터를 처리하며, 확장성과 안정성이 크게 향상되었습니다.</p>
+              </div>
+            }
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+          
+          <Alert
+            message="Cloud Function 기반 처리"
+            description="Firebase Cloud Functions를 사용하여 서버 사이드에서 데이터를 처리합니다. 클라이언트 부담 없이 대용량 데이터도 안정적으로 처리되며, 자동 확장과 최적화된 성능을 제공합니다."
+            type="success"
+            showIcon
+            style={{ marginBottom: 16 }}
           />
         </TabPane>
       </Tabs>

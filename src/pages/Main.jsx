@@ -146,7 +146,7 @@ const Main = () => {
       }
       
       setTimeRestrictions({
-        breakfast: currentHour < 1 || currentHour >= 12, // 6시부터 11시59분까지만 아침식사 가능
+        breakfast: currentHour < 6 || currentHour >= 12, // 6시부터 11시59분까지만 아침식사 가능
         lunch: currentHour < 12 || currentHour >= 18, // 12시부터 17시59분까지만 점심식사 가능
         dinner: currentHour < 18 || currentHour >= 24, // 18시부터 23시59분까지만 저녁식사 가능
         snack: false, // 간식은 제한 없음
