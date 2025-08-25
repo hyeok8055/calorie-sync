@@ -5,6 +5,7 @@ import 'dayjs/locale/ko';
 import { useSelector, useDispatch } from 'react-redux';
 import { useFood } from '@/hook/useFood';
 import { useModal } from '@/hook/useModal';
+import { useSurvey } from '@/hook/useSurvey';
 import { setMealFlags, updateMealFlag } from '@/redux/actions/mealActions';
 import { getMealFlags, updateMealFlag as updateMealFlagAPI } from '@/api/api';
 import SurveyModal from '../components/common/SurveyModal';
@@ -26,6 +27,7 @@ const Main = () => {
   const uid = useSelector((state) => state.auth.user?.uid);
   const mealFlags = useSelector((state) => state.meal.mealFlags);
   const { foodData, loading, error } = useFood(uid);
+  const { surveyState, checkGlobalSurveyStatus, checkUserSurveyCompletion } = useSurvey();
   const [timeRestrictions, setTimeRestrictions] = useState({
     breakfast: false,
     lunch: false,
@@ -34,6 +36,7 @@ const Main = () => {
   });
   const [currentTimeCategory, setCurrentTimeCategory] = useState('');
   const [surveyModalVisible, setSurveyModalVisible] = useState(false);
+  const [showSurveyNotification, setShowSurveyNotification] = useState(false);
   const navigate = useNavigate();
 
   const { showModal, showAutoModal, isModalAvailable, isAutoModalAvailable } = useModal(foodData);
@@ -49,6 +52,39 @@ const Main = () => {
       return () => clearTimeout(timer);
     }
   }, [foodData, isAutoModalAvailable, showAutoModal]);
+
+  // 설문조사 상태 확인 및 알림 표시
+  useEffect(() => {
+    const checkSurveyStatus = async () => {
+      if (uid) {
+        try {
+          // 전역 설문조사 상태 확인
+          const globalStatus = await checkGlobalSurveyStatus();
+          
+          if (globalStatus && globalStatus.isActive) {
+            // 사용자의 설문조사 완료 여부 확인
+            const userCompletion = await checkUserSurveyCompletion(uid, globalStatus.surveyId);
+            
+            // 설문조사가 활성화되어 있고 사용자가 아직 완료하지 않은 경우 알림 표시
+            const shouldShow = !userCompletion;
+            setShowSurveyNotification(shouldShow);
+          } else {
+            setShowSurveyNotification(false);
+          }
+        } catch (error) {
+          console.error('설문조사 상태 확인 실패:', error);
+          setShowSurveyNotification(false);
+        }
+      }
+    };
+
+    checkSurveyStatus();
+    
+    // 5분마다 설문조사 상태 재확인
+    const interval = setInterval(checkSurveyStatus, 5 * 60 * 1000);
+    
+    return () => clearInterval(interval);
+  }, [uid, checkGlobalSurveyStatus, checkUserSurveyCompletion]);
 
   // Firestore에서 meal flag 데이터 가져오기
   useEffect(() => {
@@ -254,20 +290,22 @@ const Main = () => {
             </Text>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div 
-              onClick={() => setSurveyModalVisible(true)}
-              style={{ 
-                cursor: 'pointer',
-                padding: '8px',
-                background: '#f0f9ff',
-                borderRadius: '50%',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center'
-              }}
-            >
-              <FormOutlined style={{ fontSize: '24px', color: '#1890ff' }} />
-            </div>
+            {showSurveyNotification && (
+              <div 
+                onClick={() => setSurveyModalVisible(true)}
+                style={{ 
+                  cursor: 'pointer',
+                  padding: '8px',
+                  background: '#f0f9ff',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center'
+                }}
+              >
+                <FormOutlined style={{ fontSize: '24px', color: '#1890ff' }} />
+              </div>
+            )}
             <div 
               onClick={showModal}
               style={{ 
@@ -297,6 +335,43 @@ const Main = () => {
           </div>
         </Row>
       </Card>
+
+      {/* 설문조사 알림 */}
+      {showSurveyNotification && (
+        <Card 
+          bordered={false} 
+          style={{ 
+            borderRadius: '16px', 
+            marginBottom: '16px',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)'
+          }}
+          onClick={() => setSurveyModalVisible(true)}
+          className="cursor-pointer hover:shadow-lg transition-all duration-300"
+        >
+          <Row justify="space-between" align="middle">
+            <div style={{ color: 'white' }}>
+              <Text style={{ fontSize: '18px', fontWeight: '700', color: 'white', fontFamily: 'Pretendard-700' }}>
+                📋 설문조사 참여 요청
+              </Text>
+              <br />
+              <Text style={{ fontSize: '14px', color: 'rgba(255,255,255,0.9)', fontFamily: 'Pretendard-500' }}>
+                점심 식사 관련 설문조사에 참여해주세요!
+              </Text>
+            </div>
+            <div style={{ 
+              background: 'rgba(255,255,255,0.2)', 
+              borderRadius: '50%', 
+              padding: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <FormOutlined style={{ fontSize: '24px', color: 'white' }} />
+            </div>
+          </Row>
+        </Card>
+      )}
 
       {/* 식사 기록 버튼 섹션 */}
       <Title level={4} style={{ margin: '24px 0 16px 0', fontFamily: 'Pretendard-700', color: '#5FDD9D' }}>

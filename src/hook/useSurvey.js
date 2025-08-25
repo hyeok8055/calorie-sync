@@ -22,18 +22,18 @@ const useSurvey = () => {
   const [error, setError] = useState(null);
 
   // 사용자의 설문조사 완료 여부 확인
-  const checkUserSurveyCompletion = useCallback(async (surveyId) => {
-    if (!uid || !surveyId) return false;
+  const checkUserSurveyCompletion = useCallback(async (userId, surveyId) => {
+    if (!userId || !surveyId) return false;
     
     try {
       // 구조: surveys/{surveyId}/responses/{userId}
-      const userResponseDoc = await getDoc(doc(db, 'surveys', surveyId, 'responses', uid));
+      const userResponseDoc = await getDoc(doc(db, 'surveys', surveyId, 'responses', userId));
       return userResponseDoc.exists();
     } catch (err) {
       console.error('사용자 설문조사 완료 여부 확인 오류:', err);
       return false;
     }
-  }, [uid]);
+  }, []);
 
   // 전역 설문조사 상태 확인
   const checkGlobalSurveyStatus = useCallback(async () => {
@@ -44,25 +44,19 @@ const useSurvey = () => {
       if (surveyDoc.exists()) {
         const data = surveyDoc.data();
         if (data.isActive && data.surveyId) {
-          // 사용자가 이미 완료했는지 확인
-          const hasCompleted = await checkUserSurveyCompletion(data.surveyId);
-          
-          if (!hasCompleted) {
-            dispatch(setSurveyActive(true, data.surveyId));
-            return { shouldShowModal: true, surveyId: data.surveyId };
-          }
+          return { isActive: true, surveyId: data.surveyId };
         }
       }
       
-      return { shouldShowModal: false, surveyId: null };
+      return { isActive: false, surveyId: null };
     } catch (err) {
       console.error('설문조사 상태 확인 오류:', err);
       setError(err.message);
-      return { shouldShowModal: false, surveyId: null };
+      return { isActive: false, surveyId: null };
     } finally {
       setLoading(false);
     }
-  }, [uid, checkUserSurveyCompletion, dispatch]);
+  }, []);
 
 
 
