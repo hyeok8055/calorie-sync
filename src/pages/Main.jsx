@@ -69,15 +69,24 @@ const Main = () => {
   useEffect(() => {
     if (foodData) {
       // foodData에서 식사 완료 상태 확인하여 Redux 상태 업데이트
+      // Redux 상태가 이미 업데이트된 경우 덮어쓰지 않도록 조건부 업데이트
       const updatedFlags = {
-        breakfast: foodData.breakfast?.flag || mealFlags.breakfast || 0,
-        lunch: foodData.lunch?.flag || mealFlags.lunch || 0,
-        dinner: foodData.dinner?.flag || mealFlags.dinner || 0,
+        breakfast: foodData.breakfast?.flag !== undefined ? foodData.breakfast.flag : mealFlags.breakfast || 0,
+        lunch: foodData.lunch?.flag !== undefined ? foodData.lunch.flag : mealFlags.lunch || 0,
+        dinner: foodData.dinner?.flag !== undefined ? foodData.dinner.flag : mealFlags.dinner || 0,
         snack: 0, // 간식은 언제든지 기록 가능하도록 항상 0으로 설정
       };
-      dispatch(setMealFlags(updatedFlags));
+      
+      // 현재 Redux 상태와 다른 경우에만 업데이트
+      const hasChanges = Object.keys(updatedFlags).some(
+        key => updatedFlags[key] !== mealFlags[key]
+      );
+      
+      if (hasChanges) {
+        dispatch(setMealFlags(updatedFlags));
+      }
     }
-  }, [foodData, dispatch]);
+  }, [foodData, dispatch]); // mealFlags를 의존성에서 제거하여 무한 루프 방지
 
   // 시간 제한 확인을 위한 useEffect
   useEffect(() => {
@@ -101,7 +110,7 @@ const Main = () => {
       }
       
       setTimeRestrictions({
-        breakfast: currentHour < 6 || currentHour >= 12, // 6시부터 11시59분까지만 아침식사 가능
+        breakfast: currentHour < 1 || currentHour >= 12, // 6시부터 11시59분까지만 아침식사 가능
         lunch: currentHour < 12 || currentHour >= 18, // 12시부터 17시59분까지만 점심식사 가능
         dinner: currentHour < 18 || currentHour >= 24, // 18시부터 23시59분까지만 저녁식사 가능
         snack: false, // 간식은 제한 없음

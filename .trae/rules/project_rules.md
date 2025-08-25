@@ -108,33 +108,15 @@ users/{uid}/
 └── setupCompleted: boolean        // 초기 설정 완료 여부
 ```
 
-#### 식사 플래그 데이터 (meals 서브컬렉션)
-```
-users/{uid}/meals/{YYYY-MM-DD}/
-├── breakfast: {
-│   ├── flag: number          // 식사 완료 플래그 (0 또는 1)
-│   └── updatedAt: string     // 업데이트 시간 (ISO string)
-│ }
-├── lunch: {
-│   ├── flag: number
-│   └── updatedAt: string
-│ }
-├── dinner: {
-│   ├── flag: number
-│   └── updatedAt: string
-│ }
-└── snack: {
-    ├── flag: number
-    └── updatedAt: string
-  }
-```
+#### 식사 플래그 데이터 (foods 컬렉션에 통합)
+**주의: 기존 meals 컬렉션은 더 이상 사용하지 않으며, 모든 식사 플래그 데이터는 foods 컬렉션에서 관리됩니다.**
 
 #### 음식 데이터 (foods 서브컬렉션)
 ```
 users/{uid}/foods/{YYYY-MM-DD}/
 ├── date: string              // 날짜 (YYYY-MM-DD)
 ├── breakfast: {
-│   ├── flag: number          // 식사 완료 플래그 (0 또는 1)
+│   ├── flag: number          // 식사 상태 플래그 (0: 미기록, 1: 식사완료, 2: 단식)
 │   ├── foods: Array<{
 │   │   ├── name: string      // 음식명
 │   │   ├── calories: number  // 칼로리
@@ -149,6 +131,7 @@ users/{uid}/foods/{YYYY-MM-DD}/
 │   ├── estimatedCalories: number | null  // 예상 칼로리
 │   ├── actualCalories: number | null     // 실제 칼로리
 │   ├── selectedFoods: Array             // 선택된 음식 목록
+│   ├── updatedAt: string                // 업데이트 시간 (ISO string)
 │   └── offset?: number                   // 칼로리 오프셋 (조정값)
 │ }
 ├── lunch: { /* breakfast와 동일 구조 */ }

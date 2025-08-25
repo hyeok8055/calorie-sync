@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { 
   doc, 
@@ -21,8 +21,22 @@ const useSurvey = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // 사용자의 설문조사 완료 여부 확인
+  const checkUserSurveyCompletion = useCallback(async (surveyId) => {
+    if (!uid || !surveyId) return false;
+    
+    try {
+      // 구조: surveys/{surveyId}/responses/{userId}
+      const userResponseDoc = await getDoc(doc(db, 'surveys', surveyId, 'responses', uid));
+      return userResponseDoc.exists();
+    } catch (err) {
+      console.error('사용자 설문조사 완료 여부 확인 오류:', err);
+      return false;
+    }
+  }, [uid]);
+
   // 전역 설문조사 상태 확인
-  const checkGlobalSurveyStatus = async () => {
+  const checkGlobalSurveyStatus = useCallback(async () => {
     try {
       setLoading(true);
       const surveyDoc = await getDoc(doc(db, 'system', 'survey'));
@@ -48,21 +62,9 @@ const useSurvey = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [uid, checkUserSurveyCompletion, dispatch]);
 
-  // 사용자의 설문조사 완료 여부 확인
-  const checkUserSurveyCompletion = async (surveyId) => {
-    if (!uid || !surveyId) return false;
-    
-    try {
-      // 구조: surveys/{surveyId}/responses/{userId}
-      const userResponseDoc = await getDoc(doc(db, 'surveys', surveyId, 'responses', uid));
-      return userResponseDoc.exists();
-    } catch (err) {
-      console.error('사용자 설문조사 완료 여부 확인 오류:', err);
-      return false;
-    }
-  };
+
 
   // 관리자: 설문조사 활성화
   const activateSurvey = async () => {
@@ -279,7 +281,7 @@ const useSurvey = () => {
     if (uid) {
       checkGlobalSurveyStatus();
     }
-  }, [uid]);
+  }, [uid, checkGlobalSurveyStatus]);
 
   return {
     surveyState,

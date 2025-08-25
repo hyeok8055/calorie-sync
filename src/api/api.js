@@ -39,11 +39,11 @@ export const searchFoodNutrition = async (keyword) => {
 
 // Meal Flag 관련 API 함수들
 
-// 오늘의 meal flag 데이터 가져오기
+// 오늘의 meal flag 데이터 가져오기 (foods 컬렉션에서)
 export const getMealFlags = async (uid) => {
   try {
     const today = getTodayDate();
-    const docRef = doc(db, 'users', uid, 'meals', today);
+    const docRef = doc(db, 'users', uid, 'foods', today);
     const docSnap = await getDoc(docRef);
     
     if (docSnap.exists()) {
@@ -69,32 +69,38 @@ export const getMealFlags = async (uid) => {
   }
 };
 
-// 특정 meal의 flag 업데이트
+// 특정 meal의 flag 업데이트 (foods 컬렉션만 사용)
 export const updateMealFlag = async (uid, mealType, flag) => {
   try {
     const today = getTodayDate();
-    const docRef = doc(db, 'users', uid, 'meals', today);
     
-    // 문서가 존재하는지 확인
-    const docSnap = await getDoc(docRef);
+    // foods 컬렉션에서 flag 업데이트
+    const foodsDocRef = doc(db, 'users', uid, 'foods', today);
+    const foodsDocSnap = await getDoc(foodsDocRef);
     
-    if (docSnap.exists()) {
-      // 문서가 존재하면 해당 meal의 flag만 업데이트
-      await updateDoc(docRef, {
+    if (foodsDocSnap.exists()) {
+      // foods 문서가 존재하면 해당 meal의 flag와 updatedAt 업데이트
+      await updateDoc(foodsDocRef, {
         [`${mealType}.flag`]: flag,
         [`${mealType}.updatedAt`]: new Date().toISOString(),
       });
     } else {
-      // 문서가 없으면 새로 생성
-      const newData = {
+      // foods 문서가 없으면 기본 구조로 생성
+      const newFoodsData = {
+        date: today,
         [mealType]: {
           flag: flag,
-          updatedAt: new Date().toISOString(),
+          foods: [],
+          estimatedCalories: null,
+          actualCalories: null,
+          selectedFoods: [],
+          updatedAt: new Date().toISOString()
         }
       };
-      await setDoc(docRef, newData);
+      await setDoc(foodsDocRef, newFoodsData);
     }
     
+
     return true;
   } catch (error) {
     console.error('Meal flag 업데이트 실패:', error);
@@ -102,11 +108,11 @@ export const updateMealFlag = async (uid, mealType, flag) => {
   }
 };
 
-// 모든 meal flag 한번에 업데이트
+// 모든 meal flag 한번에 업데이트 (foods 컬렉션만 사용)
 export const updateAllMealFlags = async (uid, mealFlags) => {
   try {
     const today = getTodayDate();
-    const docRef = doc(db, 'users', uid, 'meals', today);
+    const docRef = doc(db, 'users', uid, 'foods', today);
     
     const updateData = {};
     Object.keys(mealFlags).forEach(mealType => {
@@ -119,10 +125,17 @@ export const updateAllMealFlags = async (uid, mealFlags) => {
     if (docSnap.exists()) {
       await updateDoc(docRef, updateData);
     } else {
-      const newData = {};
+      // foods 문서가 없으면 기본 구조로 생성
+      const newData = {
+        date: today
+      };
       Object.keys(mealFlags).forEach(mealType => {
         newData[mealType] = {
           flag: mealFlags[mealType],
+          foods: [],
+          estimatedCalories: null,
+          actualCalories: null,
+          selectedFoods: [],
           updatedAt: new Date().toISOString(),
         };
       });

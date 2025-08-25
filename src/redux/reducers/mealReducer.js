@@ -16,7 +16,7 @@ const mealReducer = (state = initialState, action) => {
         ...state,
         mealFlags: action.payload,
       };
-    case UPDATE_MEAL_FLAG:
+    case 'UPDATE_MEAL_FLAG':
       return {
         ...state,
         mealFlags: {

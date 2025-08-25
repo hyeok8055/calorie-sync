@@ -9,6 +9,10 @@ import { SyncOutlined, ExclamationCircleOutlined, UserOutlined, TeamOutlined, Ed
 import { Shuffle } from 'lucide-react';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
+import useCalorieDeviation from '../../hook/useCalorieDeviation';
+import { useFood } from '../../hook/useFood';
+
+// 날짜별 그룹 관리 및 미래 편차 설정 훅 제거됨
 dayjs.locale('ko');
 
 const { Text, Title } = Typography;
@@ -48,7 +52,7 @@ const CalorieAdminPage = () => {
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [activeTab, setActiveTab] = useState('groups');
   const [selectedGroupKey, setSelectedGroupKey] = useState(null);
-  const [isGroupSettingsModalVisible, setIsGroupSettingsModalVisible] = useState(false);
+
   const [isGroupEditModalVisible, setIsGroupEditModalVisible] = useState(false);
   const [isUserModalVisible, setIsUserModalVisible] = useState(false);
   const [isAddUserModalVisible, setIsAddUserModalVisible] = useState(false);
@@ -62,11 +66,44 @@ const CalorieAdminPage = () => {
   const [randomSelectionMode, setRandomSelectionMode] = useState('count');
   const [randomSelectedUsers, setRandomSelectedUsers] = useState([]);
   const [form] = Form.useForm();
-  const [groupSettingsForm] = Form.useForm();
+
   const [groupEditForm] = Form.useForm();
   const [randomUserForm] = Form.useForm();
   const user = useSelector((state) => state.auth.user);
   const navigate = useNavigate();
+  
+  // 현재 선택된 그룹의 편차 설정을 가져오는 함수
+  const getCurrentGroupDeviationSettings = useCallback(() => {
+    if (!selectedGroupKey) {
+      // 기본 그룹 설정 사용
+      const defaultGroup = groups.find(g => g.id === DEFAULT_GROUP_ID);
+      return {
+        multiplier: defaultGroup?.deviationMultiplier || 0.2,
+        defaultValue: defaultGroup?.defaultDeviation || 0
+      };
+    }
+    
+    const selectedGroup = groups.find(g => g.name === selectedGroupKey);
+    return {
+      multiplier: selectedGroup?.deviationMultiplier || 0.2,
+      defaultValue: selectedGroup?.defaultDeviation || 0
+    };
+  }, [selectedGroupKey, groups]);
+
+  // 칼로리 편차 관리 훅 사용 (그룹별 설정값 전달)
+  const {
+    calculateFinalDifference,
+    applyDeviation,
+    updateUserCalorieDeviation,
+    updateGroupCalorieDeviation,
+    getAppliedDeviation
+  } = useCalorieDeviation(getCurrentGroupDeviationSettings());
+  
+  // useFood 훅에서 applyGroupDeviation 가져오기
+  const { applyGroupDeviation } = useFood();
+  
+  // 편차 조작 상태
+  const [loadingDeviation, setLoadingDeviation] = useState(false);
   
   // 미디어 쿼리로 모바일 환경 감지
   const isMobile = useMediaQuery({ maxWidth: 767 });
@@ -105,7 +142,9 @@ const CalorieAdminPage = () => {
               name: '기본 그룹',
               color: '#8c8c8c',
               description: '그룹 미지정',
-              isDefault: true
+              isDefault: true,
+              deviationMultiplier: 0.2, // 기본값 20%
+              defaultDeviation: 0 // 기본값 0
           };
           try {
               const defaultGroupRef = doc(db, 'calorieGroups', DEFAULT_GROUP_ID);
@@ -189,6 +228,8 @@ const CalorieAdminPage = () => {
       setLoadingUsers(false);
     }
   }, []);
+  
+  // 날짜별 그룹 관리 및 미래 편차 설정 관련 함수들 제거됨
 
   // 데이터 로딩 통합 (selectedDate 변경 시 사용자 데이터 다시 로드)
   const loadData = useCallback(async () => {
@@ -250,13 +291,17 @@ const CalorieAdminPage = () => {
           name: values.name,
           description: values.description,
           color: typeof values.color === 'object' ? values.color.toHexString() : values.color,
+          deviationMultiplier: values.deviationMultiplier || 0.2, // 기본값 20%
+          defaultDeviation: values.defaultDeviation || 0, // 기본값 0
+          createdDate: Timestamp.now(), // 그룹 생성 날짜
+          applicableDate: Timestamp.fromDate(selectedDate.toDate()), // 상단에서 선택된 날짜로 자동 설정
       };
 
       try {
           setLoadingGroups(true);
           if (editingGroup) {
               if (editingGroup.isDefault) {
-                   message.warn('기본 그룹은 수정할 수 없습니다.');
+                   message.warning('기본 그룹은 수정할 수 없습니다.');
                    return;
               }
               const groupRef = doc(db, 'calorieGroups', editingGroup.id);
@@ -267,6 +312,12 @@ const CalorieAdminPage = () => {
                   ...groupData,
                   key: `group_${Date.now()}`
               });
+              
+              // 그룹 생성 시 users 서브컬렉션 초기화
+              const usersCollectionRef = collection(db, 'calorieGroups', docRef.id, 'users');
+              // 빈 컬렉션을 위한 더미 문서 생성 (필요시)
+              // await setDoc(doc(usersCollectionRef, '_placeholder'), { created: new Date() });
+              
               message.success('새 그룹이 생성되었습니다.');
           }
           setIsGroupEditModalVisible(false);
@@ -281,7 +332,7 @@ const CalorieAdminPage = () => {
   // 그룹 삭제 처리
   const handleDeleteGroup = (group) => {
       if (group.isDefault || group.id === DEFAULT_GROUP_ID) {
-          message.warn('기본 그룹은 삭제할 수 없습니다.');
+          message.warning('기본 그룹은 삭제할 수 없습니다.');
           return;
       }
 
@@ -305,6 +356,16 @@ const CalorieAdminPage = () => {
                   });
                   await batch.commit();
 
+                  // users 서브컬렉션의 모든 문서 삭제
+                  const groupUsersQuery = query(collection(db, 'calorieGroups', group.id, 'users'));
+                  const groupUsersSnapshot = await getDocs(groupUsersQuery);
+                  const usersBatch = writeBatch(db);
+                  groupUsersSnapshot.forEach(userDoc => {
+                      usersBatch.delete(userDoc.ref);
+                  });
+                  await usersBatch.commit();
+
+                  // 그룹 문서 삭제
                   const groupRef = doc(db, 'calorieGroups', group.id);
                   await deleteDoc(groupRef);
                   message.success(`'${group.name}' 그룹이 삭제되었습니다.`);
@@ -347,6 +408,35 @@ const CalorieAdminPage = () => {
         calorieBias: values.calorieBias
       });
 
+      // 그룹이 변경된 경우 users 서브컬렉션 업데이트
+      if (currentUser.group !== values.group) {
+        const batch = writeBatch(db);
+        
+        // 이전 그룹에서 사용자 제거 (기본 그룹이 아닌 경우)
+        if (currentUser.group !== DEFAULT_GROUP_VALUE) {
+          const oldGroup = groups.find(g => g.name === currentUser.group);
+          if (oldGroup && !oldGroup.isDefault) {
+            const oldGroupUserRef = doc(db, 'calorieGroups', oldGroup.id, 'users', currentUser.key);
+            batch.delete(oldGroupUserRef);
+          }
+        }
+        
+        // 새 그룹에 사용자 추가 (기본 그룹이 아닌 경우)
+        if (values.group !== DEFAULT_GROUP_VALUE) {
+          const newGroup = groups.find(g => g.name === values.group);
+          if (newGroup && !newGroup.isDefault) {
+            const newGroupUserRef = doc(db, 'calorieGroups', newGroup.id, 'users', currentUser.key);
+            batch.set(newGroupUserRef, {
+              uid: currentUser.key,
+              addedAt: new Date(),
+              addedBy: 'admin'
+            });
+          }
+        }
+        
+        await batch.commit();
+      }
+
       message.success('사용자 설정이 업데이트되었습니다.');
       setIsUserModalVisible(false);
       await loadData();
@@ -357,44 +447,9 @@ const CalorieAdminPage = () => {
     }
   };
 
-  // 그룹 설정 모달
-  const handleOpenGroupSettingsModal = (groupKeyOrId) => {
-    const group = groups.find(g => g.id === groupKeyOrId || g.name === groupKeyOrId);
-    if (!group) return;
-    
-    setSelectedGroupKey(group.name);
-    
-    const groupUser = users.find(u => u.group === group.name);
-    const defaultCalorieBias = groupUser ? groupUser.calorieBias : 0;
-    
-    groupSettingsForm.setFieldsValue({
-      calorieBias: defaultCalorieBias
-    });
-    
-    setIsGroupSettingsModalVisible(true);
-  };
 
-  // 그룹 설정 저장
-  const handleSaveGroupSettings = async (values) => {
-    if (!selectedGroupKey) return;
-    try {
-      setLoadingGroups(true);
-      const groupUsers = users.filter(user => user.group === selectedGroupKey);
-      const batch = writeBatch(db);
-      for (const groupUser of groupUsers) {
-        const userRef = doc(db, 'users', groupUser.key);
-        batch.update(userRef, { calorieBias: values.calorieBias });
-      }
-      await batch.commit();
-      
-      message.success(`${groups.find(g => g.name === selectedGroupKey)?.name || selectedGroupKey} 그룹의 칼로리 편차가 업데이트되었습니다.`);
-      setIsGroupSettingsModalVisible(false);
-      await loadData();
-    } catch (error) {
-      console.error('그룹 칼로리 편차 설정 업데이트 실패:', error);
-      message.error('그룹 칼로리 편차 설정 업데이트에 실패했습니다.');
-    } finally { setLoadingGroups(false); }
-  };
+
+
 
   // 사용자 추가 모달
   const handleOpenAddUserModal = (group) => {
@@ -472,10 +527,22 @@ const CalorieAdminPage = () => {
     try {
       setLoadingUsers(true);
       const batch = writeBatch(db);
+      
       targetKeysForTransfer.forEach(userKey => {
         const userRef = doc(db, 'users', userKey);
         batch.update(userRef, { group: targetGroupValue });
+        
+        // calorieGroups/{그룹ID}/users/ 컬렉션에 사용자 UID 저장
+        if (!targetGroupForAddingUser.isDefault) {
+          const groupUserRef = doc(db, 'calorieGroups', targetGroupForAddingUser.id, 'users', userKey);
+          batch.set(groupUserRef, {
+            uid: userKey,
+            addedAt: new Date(),
+            addedBy: 'admin'
+          });
+        }
       });
+      
       await batch.commit();
       message.success(`${targetKeysForTransfer.length}명의 사용자가 '${targetGroupForAddingUser.name}' 그룹에 추가되었습니다.`);
       setIsRandomUserModalVisible(false);
@@ -541,10 +608,22 @@ const CalorieAdminPage = () => {
     try {
         setLoadingUsers(true);
         const batch = writeBatch(db);
+        
         targetKeysForTransfer.forEach(userKey => {
             const userRef = doc(db, 'users', userKey);
             batch.update(userRef, { group: targetGroupValue });
+            
+            // calorieGroups/{그룹ID}/users/ 컬렉션에 사용자 UID 저장
+            if (!targetGroupForAddingUser.isDefault) {
+              const groupUserRef = doc(db, 'calorieGroups', targetGroupForAddingUser.id, 'users', userKey);
+              batch.set(groupUserRef, {
+                uid: userKey,
+                addedAt: new Date(),
+                addedBy: 'admin'
+              });
+            }
         });
+        
         await batch.commit();
         message.success(`${targetKeysForTransfer.length}명의 사용자가 '${targetGroupForAddingUser.name}' 그룹에 추가되었습니다.`);
         setIsAddUserModalVisible(false);
@@ -560,6 +639,7 @@ const CalorieAdminPage = () => {
 
   // 그룹 정보를 표시하는 카드 컴포넌트
   const GroupCard = ({ group }) => {
+    
     const groupUsers = users.filter(user => {
         if (group.isDefault) {
             return user.group === DEFAULT_GROUP_VALUE;
@@ -584,42 +664,41 @@ const CalorieAdminPage = () => {
     // GroupCard 내부에서는 직접 맵 사용 또는 필요시 변수 선언
     const mealTypeKoreanLabel = mealTypeKoreanMap[selectedMealType] || selectedMealType;
 
+
+
     return (
       <Card
+        size='small'
         title={
           <Space wrap>
             <Tag color={group.color || 'default'}>{group.name || '이름 없음'}</Tag>
-            <Text style={{ fontSize: '14px' }}>{group.description || '설명 없음'}</Text>
-            {group.isDefault && <Tag>기본</Tag>}
           </Space>
         }
         extra={
-          <Space wrap size={isMobile ? 'small' : 'middle'}>
+          <Space wrap size="small">
+             <Button
+                 icon={<EditOutlined />}
+                 size="small"
+                 onClick={() => handleOpenGroupEditModal(group)}
+                 title="그룹 정보 수정"
+                 text="정보 수정"
+             />
              {!group.isDefault && (
                  <>
-                     <Button
-                         icon={<EditOutlined />}
-                         size="small"
-                         onClick={() => handleOpenGroupEditModal(group)}
-                         title="그룹 정보 수정"
-                     >
-                         정보 수정
-                     </Button>
                      <Button
                          danger
                          icon={<DeleteOutlined />}
                          size="small"
                          onClick={() => handleDeleteGroup(group)}
                          title="그룹 삭제"
-                     >
-                         그룹 삭제
-                     </Button>
+                     />
                      <Popover
                        content={
-                         <div style={{ width: 200 }}>
+                         <div style={{ width: 180 }}>
                            <Button 
                              icon={<UserAddOutlined />} 
                              block 
+                             size="small"
                              style={{ marginBottom: 8 }}
                              onClick={() => {
                                handleOpenAddUserModal(group);
@@ -628,17 +707,18 @@ const CalorieAdminPage = () => {
                              수동 선택
                            </Button>
                            <Button 
-                             icon={<Shuffle size={16} />} 
+                             icon={<Shuffle size={14} />} 
                              block
+                             size="small"
                              onClick={() => {
-                               handleOpenRandomUserModal(group);
+                                handleOpenRandomUserModal(group);
                              }}
                            >
                              랜덤 추출
                            </Button>
                          </div>
                        }
-                       title="사용자 추가 방법"
+                       title="사용자 추가"
                        trigger="click"
                        placement="bottom"
                      >
@@ -646,70 +726,77 @@ const CalorieAdminPage = () => {
                          icon={<UserAddOutlined />}
                          size="small"
                          title="사용자 추가"
-                       >
-                         사용자 추가
-                       </Button>
+                       />
                      </Popover>
-                     <Divider type="vertical" />
                  </>
              )}
-            <Button
-              type="primary"
-              icon={<EditOutlined />}
-              size="small"
-              onClick={() => handleOpenGroupSettingsModal(group.name)}
-              title="그룹 칼로리 편차 설정"
-            >
-              편차 설정
-            </Button>
             <Button
               type="default"
               icon={<SyncOutlined />}
               size="small"
               onClick={() => {
                 confirm({
-                  title: `${group.name} ${selectedDate.format('YYYY-MM-DD')} ${mealTypeKoreanLabel} 편차 적용`,
+                  title: `${group.name} ${selectedDate.format('YYYY-MM-DD')} ${mealTypeKoreanLabel} 동기화 적용`,
                   icon: <ExclamationCircleOutlined />,
                   content: `${groupUsers.length}명 사용자에게 offset 적용?`,
                   onOk() { applyGroupCalorieBias(group.name); }
                 });
               }}
-              title="그룹 전체 사용자에게 편차 적용"
-            >
-              편차 적용
-            </Button>
+              title="그룹 전체 사용자에게 동기화 적용"
+            />
           </Space>
         }
-        style={{ marginBottom: 16 }}
+        style={{ marginBottom: group.isDefault ? 8 : 16 }}
       >
-        <Row gutter={[16, 16]}>
-          <Col xs={24}>
-            <Text strong style={{ fontSize: '18px', display: 'block', marginBottom: '8px' }}>
-              {group.name}
-            </Text>
-            <Text type="secondary" style={{ fontSize: '14px', display: 'block', marginBottom: '16px' }}>
-              {group.description || '설명 없음'}
-            </Text>
-          </Col>
-          <Col xs={24} sm={12} md={8}>
-            <Statistic title="사용자 수" value={groupUsers.length} suffix="명" />
-          </Col>
-          <Col xs={24} sm={12} md={8}>
-            <Statistic title={`평균 편차 (${selectedDate.format('MM/DD')} ${mealTypeKoreanLabel})`} value={averageSpecificBias} suffix={`kcal (${countWithSpecificData}명)`} />
-          </Col>
-          <Col xs={24} sm={24} md={8}>
-            <Space wrap>
-              {groupUsers.slice(0, isMobile ? 3 : 5).map(user => (
-                <Tooltip key={user.key} title={`${user.name} (${user.email}) - 설정값: ${user.calorieBias > 0 ? '+' : ''}${user.calorieBias}kcal`}>
-                  <Tag color={group.color || 'default'}>
-                    {user.name || user.email.split('@')[0]} ({user.calorieBias > 0 ? '+' : ''}{user.calorieBias})
-                  </Tag>
-                 </Tooltip>
-              ))}
-              {groupUsers.length > (isMobile ? 3 : 5) && <Tag>+{groupUsers.length - (isMobile ? 3 : 5)}명...</Tag>}
-            </Space>
-          </Col>
-        </Row>
+        {group.isDefault ? (
+          // 기본 그룹(미지정 유저)은 간결하게 표시
+          <Row gutter={[8, 8]} align="middle">
+            <Col xs={12} sm={8}>
+              <Statistic title="사용자 수" value={groupUsers.length} suffix="명" />
+            </Col>
+            <Col xs={12} sm={8}>
+              <Statistic title="평균 편차" value={averageSpecificBias} suffix="kcal" />
+            </Col>
+            <Col xs={24} sm={8}>
+              {groupUsers.length > 0 ? (
+                <Text type="secondary" style={{ fontSize: '12px' }}>
+                  {groupUsers.length}명의 미지정 사용자
+                </Text>
+              ) : (
+                <Text type="secondary" style={{ fontSize: '12px' }}>미지정 사용자 없음</Text>
+              )}
+            </Col>
+          </Row>
+        ) : (
+          // 일반 그룹은 상세하게 표시
+          <Row gutter={[16, 16]}>
+            <Col xs={24}>
+              <Text type="secondary" style={{ fontSize: '14px', fontWeight:'bold', display: 'block', marginBottom: '3px' }}>
+                {group.description || '설명 없음'}
+              </Text>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Statistic title="사용자 수" value={groupUsers.length} suffix="명" />
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Statistic title={`평균 편차 (${selectedDate.format('MM/DD')} ${mealTypeKoreanLabel})`} value={averageSpecificBias} suffix={`kcal (${countWithSpecificData}명)`} />
+            </Col>
+            <Col xs={24} sm={24} md={8}>
+              <Space wrap>
+                {groupUsers.slice(0, isMobile ? 3 : 5).map(user => (
+                  <Tooltip key={user.key} title={`${user.name} (${user.email}) - 설정값: ${user.calorieBias > 0 ? '+' : ''}${user.calorieBias}kcal`}>
+                    <Tag color={group.color || 'default'}>
+                      {user.name || user.email.split('@')[0]} ({user.calorieBias > 0 ? '+' : ''}{user.calorieBias})
+                    </Tag>
+                   </Tooltip>
+                ))}
+                {groupUsers.length > (isMobile ? 3 : 5) && <Tag>+{groupUsers.length - (isMobile ? 3 : 5)}명...</Tag>}
+              </Space>
+            </Col>
+            
+
+          </Row>
+        )}
       </Card>
     );
   };
@@ -765,7 +852,15 @@ const CalorieAdminPage = () => {
       },
       filters: [
           { text: '기본 그룹', value: DEFAULT_GROUP_VALUE },
-          ...groups.filter(g => !g.isDefault).map(g => ({ text: g.name, value: g.name }))
+          ...groups.filter(g => {
+            if (g.isDefault) return false; // 기본 그룹은 이미 위에서 처리됨
+            if (!g.applicableDate) return false; // applicableDate가 없는 그룹은 제외
+            
+            // 선택된 날짜와 그룹의 적용 날짜가 같은 경우만 표시
+            const groupDate = dayjs(g.applicableDate.toDate()).format('YYYY-MM-DD');
+            const selectedDateStr = selectedDate.format('YYYY-MM-DD');
+            return groupDate === selectedDateStr;
+          }).map(g => ({ text: g.name, value: g.name }))
       ],
       onFilter: (value, record) => record.group === value,
     },
@@ -792,14 +887,14 @@ const CalorieAdminPage = () => {
             return <Text type="secondary">기록 없음</Text>;
         }
         const originalDifference = mealData.actualCalories - mealData.estimatedCalories;
-        const offset = mealData.offset;
-        const finalDifference = originalDifference + (offset ?? 0);
+        const appliedDeviation = mealData.offset; // 기존 필드명 유지 (추후 변경 예정)
+        const finalDifference = originalDifference + (appliedDeviation ?? 0);
         return (
              <Space direction="vertical" size={0}>
                 <Text>예:{mealData.estimatedCalories} / 실:{mealData.actualCalories}</Text>
                 <Space>
                    <Tooltip title={`원본차(${originalDifference})`}><Text style={{ color: originalDifference > 0 ? '#ff4d4f' : originalDifference < 0 ? '#1677ff' : 'inherit' }}>({originalDifference>0?'+':''}{originalDifference})</Text></Tooltip>
-                   {offset !== null && offset !== 0 && (<Tooltip title={`편차(offset:${offset})`}><Text strong style={{ color: finalDifference > 0 ? '#ff4d4f' : finalDifference < 0 ? '#1677ff' : 'inherit' }}>→{finalDifference>0?'+':''}{finalDifference}</Text></Tooltip>)}
+                   {appliedDeviation !== null && appliedDeviation !== 0 && (<Tooltip title={`적용편차(${appliedDeviation})`}><Text strong style={{ color: finalDifference > 0 ? '#ff4d4f' : finalDifference < 0 ? '#1677ff' : 'inherit' }}>→{finalDifference>0?'+':''}{finalDifference}</Text></Tooltip>)}
                 </Space>
              </Space>
         );
@@ -820,7 +915,7 @@ const CalorieAdminPage = () => {
               confirm({
                 title: '개별 편차 적용',
                 icon: <ExclamationCircleOutlined />,
-                content: `${record.name} (${selectedDate.format('YYYY-MM-DD')} ${mealTypeKoreanMap[selectedMealType] || selectedMealType}) offset(${record.calorieBias}) 적용?`,
+                content: `${record.name} (${selectedDate.format('YYYY-MM-DD')} ${mealTypeKoreanMap[selectedMealType] || selectedMealType}) 칼로리편차(${record.calorieBias}) 적용?`,
                 onOk() { applyCalorieBias(record.key); }
               });
             }}
@@ -876,10 +971,10 @@ const CalorieAdminPage = () => {
                         const mealData = r.foodDocForSelectedDate[selectedMealType];
                         if (mealData && mealData.actualCalories !== null && mealData.estimatedCalories !== null) {
                             const originalDifference = mealData.actualCalories - mealData.estimatedCalories;
-                            const offset = mealData.offset;
-                            const finalDifference = originalDifference + (offset ?? 0);
+                            const appliedDeviation = mealData.offset; // 기존 필드명 유지 (추후 변경 예정)
+                            const finalDifference = originalDifference + (appliedDeviation ?? 0);
                             return (
-                                 <Tooltip title={`실제: ${mealData.actualCalories}, 예상: ${mealData.estimatedCalories}, 편차(offset): ${offset ?? 0}`}>
+                                 <Tooltip title={`실제: ${mealData.actualCalories}, 예상: ${mealData.estimatedCalories}, 적용편차: ${appliedDeviation ?? 0}`}>
                                      <Text style={{ color: finalDifference > 0 ? '#ff4d4f' : finalDifference < 0 ? '#1677ff' : 'inherit' }}>
                                           {finalDifference > 0 ? '+' : ''}{finalDifference} kcal
                                      </Text>
@@ -909,7 +1004,7 @@ const CalorieAdminPage = () => {
               confirm({
                 title: '개별 편차 적용',
                 icon: <ExclamationCircleOutlined />,
-                content: `${record.name} (${selectedDate.format('YYYY-MM-DD')} ${mealTypeKoreanMap[selectedMealType] || selectedMealType}) offset(${record.calorieBias}) 적용?`,
+                content: `${record.name} (${selectedDate.format('YYYY-MM-DD')} ${mealTypeKoreanMap[selectedMealType] || selectedMealType}) 칼로리편차(${record.calorieBias}) 적용?`,
                 onOk() { applyCalorieBias(record.key); }
               });
             }}
@@ -921,8 +1016,8 @@ const CalorieAdminPage = () => {
     }
   ];
 
-  // 칼로리 편차 적용 함수 (선택된 날짜/식사 유형 타겟)
-  const applyCalorieBias = async (userId) => {
+  // 칼로리 편차 적용 함수 (선택된 날짜/식사 유형 타겟) - 새로운 훅 사용
+  const handleApplyUserDeviation = async (userId) => {
     if (!selectedDate || !selectedMealType) {
         message.error('편차를 적용할 날짜와 식사 유형을 선택하세요.');
         return;
@@ -932,32 +1027,27 @@ const CalorieAdminPage = () => {
       const userInfo = users.find(u => u.key === userId);
       if (!userInfo) { message.error("사용자 없음"); return; }
       
-      const userCalorieBias = userInfo.calorieBias;
+      const userCalorieDeviation = userInfo.calorieBias; // 기존 필드명 유지 (추후 변경 예정)
       const dateString = selectedDate.format('YYYY-MM-DD');
-      const foodDocRef = doc(db, `users/${userId}/foods`, dateString);
-
-      // 문서 존재 여부 확인 후 업데이트
-      const foodDocSnap = await getDoc(foodDocRef);
-      if (foodDocSnap.exists()) {
-          const updateData = { [`${selectedMealType}.offset`]: userCalorieBias };
-          await updateDoc(foodDocRef, updateData);
-          message.success(`${userInfo.name || userInfo.email}의 ${dateString} ${selectedMealType} 편차(offset: ${userCalorieBias}) 적용 완료`);
-          // 중요: UI 즉시 반영 위해 로컬 상태 업데이트 또는 전체 데이터 리로드
-          // 여기서는 간단하게 전체 리로드
-          await loadData(); 
-      } else {
-          message.warn(`${userInfo.name || userInfo.email}님은 ${dateString} 날짜의 식사 기록이 없습니다.`);
-      }
+      
+      // 새로운 훅의 applyDeviation 함수 사용
+      await applyDeviation(userId, dateString, selectedMealType, userCalorieDeviation);
+      
+      message.success(`${userInfo.name || userInfo.email}의 ${dateString} ${selectedMealType} 편차(appliedDeviation: ${userCalorieDeviation}) 적용 완료`);
+      await loadData(); // 데이터 리로드
 
     } catch (error) {
-      console.error('개별 편차(offset) 적용 실패:', error);
-      message.error('개별 편차(offset) 적용에 실패했습니다.');
+      console.error('개별 편차 적용 실패:', error);
+      message.error('개별 편차 적용에 실패했습니다.');
     } finally {
       setLoadingUsers(false);
     }
   };
+  
+  // 기존 함수명 호환성을 위한 별칭
+  const applyCalorieBias = handleApplyUserDeviation;
 
-  const applyGroupCalorieBias = async (groupKeyOrId) => {
+  const handleApplyGroupDeviation = async (groupKeyOrId) => {
      if (!selectedDate || !selectedMealType) {
         message.error('편차를 적용할 날짜와 식사 유형을 선택하세요.');
         return;
@@ -965,7 +1055,7 @@ const CalorieAdminPage = () => {
     
     // 그룹 유효성 검사
     const isValidGroup = groupKeyOrId === DEFAULT_GROUP_VALUE || 
-                        groups.some(g => g.name === groupKeyOrId && !g.isDefault);
+                        groups.some(g => g.name === groupKeyOrId || (g.isDefault && groupKeyOrId === DEFAULT_GROUP_VALUE));
     
     if (!isValidGroup) {
       message.error('유효하지 않은 그룹입니다.');
@@ -974,50 +1064,128 @@ const CalorieAdminPage = () => {
     
     try {
       setLoadingUsers(true);
-      const groupUsers = users.filter(user => user.group === groupKeyOrId);
-      if (groupUsers.length === 0) { message.info('그룹 사용자 없음'); setLoadingUsers(false); return; }
-      
       const dateString = selectedDate.format('YYYY-MM-DD');
-      let updatedUserCount = 0;
-      const batch = writeBatch(db); // Batch 사용
-      const promises = []; // 각 사용자 문서 존재 확인 Promise 배열
-
-      for (const groupUser of groupUsers) {
-          const userId = groupUser.key;
-          const userCalorieBias = groupUser.calorieBias;
-          const foodDocRef = doc(db, `users/${userId}/foods`, dateString);
-          
-          // 비동기로 각 사용자 문서 확인
-          promises.push(
-              getDoc(foodDocRef).then(foodDocSnap => {
-                  if (foodDocSnap.exists()) {
-                      // 문서가 존재하면 Batch에 업데이트 추가
-                      batch.update(foodDocRef, { [`${selectedMealType}.offset`]: userCalorieBias });
-                      return true; // 업데이트 대상임을 표시
-                  }
-                  return false; // 업데이트 대상 아님
-              })
-          );
+      
+      // 현재 그룹 시스템 사용
+      let targetUsers = users.filter(user => user.group === groupKeyOrId);
+      
+      if (targetUsers.length === 0) { 
+        message.info('대상 사용자가 없습니다.'); 
+        setLoadingUsers(false); 
+        return; 
       }
-
-      // 모든 사용자 문서 확인 완료 기다림
-      const updateResults = await Promise.all(promises);
-      updatedUserCount = updateResults.filter(result => result === true).length;
-
-      if (updatedUserCount > 0) {
-          await batch.commit(); // Batch 실행
-          const groupName = groups.find(g => g.name === groupKeyOrId)?.name || groupKeyOrId;
-          message.success(`${groupName} 그룹 ${updatedUserCount}명 사용자의 ${dateString} ${selectedMealType} 편차(offset) 적용 완료`);
-          await loadData(); // 데이터 리로드
-      } else {
-          message.info(`${groups.find(g => g.name === groupKeyOrId)?.name || groupKeyOrId} 그룹 사용자 중 ${dateString} 날짜의 식사 기록이 있는 사람이 없습니다.`);
+      
+      const userIds = targetUsers.map(user => user.key);
+      
+      // 그룹 ID 결정
+      const effectiveGroupId = groupKeyOrId === DEFAULT_GROUP_VALUE ? DEFAULT_GROUP_ID : 
+         groups.find(g => g.name === groupKeyOrId)?.id;
+      
+      // 새로운 훅의 applyGroupDeviation 함수 사용 (자동 계산 모드로 그룹 ID 포함)
+      const result = await applyGroupDeviation(userIds, dateString, selectedMealType, null, true, effectiveGroupId);
+      
+      if (!result.success) {
+        throw new Error(result.error || '그룹 편차 적용에 실패했습니다.');
       }
+      
+      const groupName = groupKeyOrId === DEFAULT_GROUP_VALUE ? '기본 그룹' : 
+         (groups.find(g => g.name === groupKeyOrId)?.name || groupKeyOrId);
+      
+      message.success(`${groupName}의 ${dateString} ${selectedMealType} 편차 적용 완료 (${targetUsers.length}명)`);
+      await loadData(); // 데이터 리로드
 
     } catch (error) {
-      console.error('그룹 편차(offset) 적용 실패:', error);
-      message.error('그룹 편차(offset) 적용에 실패했습니다.');
+      console.error('그룹 편차 적용 실패:', error);
+      message.error('그룹 편차 적용에 실패했습니다.');
     } finally {
       setLoadingUsers(false);
+    }
+  };
+  
+  // 기존 함수명 호환성을 위한 별칭
+  const applyGroupCalorieBias = handleApplyGroupDeviation;
+
+  // 개별 사용자 편차 적용 함수 (과거/미래 자동 구분)
+  const handleApplyMealDeviation = async (userId, targetDate, mealType, deviation) => {
+    try {
+      const dateString = typeof targetDate === 'string' ? targetDate : targetDate.format('YYYY-MM-DD');
+      const today = dayjs().format('YYYY-MM-DD');
+      const isPastDate = dayjs(dateString).isBefore(today, 'day');
+      const isFutureDate = dayjs(dateString).isAfter(today, 'day');
+      
+      const userInfo = users.find(u => u.key === userId);
+      if (!userInfo) {
+        message.error('사용자 정보를 찾을 수 없습니다.');
+        return;
+      }
+      
+      // 편차 적용 (자동 계산 모드로 내부적으로 과거/미래 구분 처리)
+      await applyDeviation(userId, dateString, mealType, deviation, true);
+      
+      const actionType = isPastDate ? '수정' : isFutureDate ? '설정' : '적용';
+      message.success(`${userInfo.name || userInfo.email}의 ${dateString} ${mealTypeKoreanMap[mealType]} 편차 ${actionType} 완료`);
+      
+      // 현재 선택된 날짜가 적용한 날짜와 같으면 데이터 리로드
+      if (selectedDate.format('YYYY-MM-DD') === dateString) {
+        await loadData();
+      }
+      
+    } catch (error) {
+      console.error('편차 적용 실패:', error);
+      message.error('편차 적용에 실패했습니다.');
+    }
+  };
+
+  // 그룹 편차 적용 함수 (과거/미래 자동 구분)
+  const handleApplyGroupMealDeviation = async (groupKeyOrId, targetDate, mealType) => {
+    try {
+      const dateString = typeof targetDate === 'string' ? targetDate : targetDate.format('YYYY-MM-DD');
+      const today = dayjs().format('YYYY-MM-DD');
+      const isPastDate = dayjs(dateString).isBefore(today, 'day');
+      const isFutureDate = dayjs(dateString).isAfter(today, 'day');
+      
+      // 그룹 유효성 검사
+      const isValidGroup = groupKeyOrId === DEFAULT_GROUP_VALUE || 
+                          groups.some(g => g.name === groupKeyOrId || (g.isDefault && groupKeyOrId === DEFAULT_GROUP_VALUE));
+      
+      if (!isValidGroup) {
+        message.error('유효하지 않은 그룹입니다.');
+        return;
+      }
+      
+      // 기본 그룹 시스템만 사용 (날짜별 그룹 제거)
+      const targetUsers = users.filter(user => user.group === groupKeyOrId);
+      
+      if (targetUsers.length === 0) {
+        message.info('대상 사용자가 없습니다.');
+        return;
+      }
+      
+      const userIds = targetUsers.map(user => user.key);
+      const effectiveGroupId = groupKeyOrId === DEFAULT_GROUP_VALUE ? DEFAULT_GROUP_ID : 
+         groups.find(g => g.name === groupKeyOrId)?.id;
+      
+      // 그룹 편차 적용 (자동 계산 모드로 내부적으로 과거/미래 구분 처리)
+      const result = await applyGroupDeviation(userIds, dateString, mealType, null, true, effectiveGroupId);
+      
+      if (!result.success) {
+        throw new Error(result.error || '그룹 편차 적용에 실패했습니다.');
+      }
+      
+      const groupName = groupKeyOrId === DEFAULT_GROUP_VALUE ? '기본 그룹' : 
+         (groups.find(g => g.name === groupKeyOrId)?.name || groupKeyOrId);
+      
+      const actionType = isPastDate ? '수정' : isFutureDate ? '설정' : '적용';
+      message.success(`${groupName}의 ${dateString} ${mealTypeKoreanMap[mealType]} 편차 ${actionType} 완료 (${targetUsers.length}명)`);
+      
+      // 현재 선택된 날짜가 적용한 날짜와 같으면 데이터 리로드
+      if (selectedDate.format('YYYY-MM-DD') === dateString) {
+        await loadData();
+      }
+      
+    } catch (error) {
+      console.error('과거 그룹 편차 재적용 실패:', error);
+      message.error('과거 그룹 편차 재적용에 실패했습니다.');
     }
   };
 
@@ -1043,9 +1211,9 @@ const CalorieAdminPage = () => {
           message="칼로리 편차 관리 도움말"
           description={
             <div>
-              <p><strong>그룹 관리</strong>: 사용자들을 그룹으로 관리하고 그룹별 칼로리 편차를 설정할 수 있습니다.</p>
-              <p><strong>편차 설정</strong>: 그룹 또는 개별 사용자의 칼로리 편차를 설정합니다.</p>
-              <p><strong>편차 적용</strong>: 설정된 편차를 선택한 날짜와 식사 유형에 적용합니다.</p>
+              <p><strong>그룹 관리</strong>: 사용자들을 그룹으로 관리하고 각 그룹 카드에서 직접 칼로리 편차를 설정할 수 있습니다.</p>
+              <p><strong>편차 설정</strong>: 그룹 카드의 '편차 설정' 버튼을 클릭하여 해당 그룹의 모든 사용자에게 편차를 적용할 수 있습니다.</p>
+              <p><strong>개별 사용자</strong>: 개별 사용자 탭에서 특정 사용자의 칼로리 편차를 개별적으로 설정할 수 있습니다.</p>
               <p><strong>랜덤 추출</strong>: 사용자를 랜덤하게 선택하여 그룹에 추가할 수 있습니다.</p>
             </div>
           }
@@ -1082,11 +1250,13 @@ const CalorieAdminPage = () => {
             </Select>
         </Col>
         <Col xs={24} sm={8} md={12}>
-            <Text type="secondary" style={{ fontSize: '12px' }}>
-                선택한 날짜와 식사 유형 기준으로 평균 편차 계산 및 offset 적용이 수행됩니다.
+            <Text type="secondary" style={{ fontSize: isMobile ? '12px' : '14px' }}>
+                선택한 날짜에 생성된 그룹만 표시되며, 해당 날짜와 식사 유형 기준으로 편차가 적용됩니다.
             </Text>
         </Col>
       </Row>
+      
+
 
       <Tabs 
         activeKey={activeTab} 
@@ -1097,7 +1267,7 @@ const CalorieAdminPage = () => {
           <Row justify="space-between" align="middle" style={{ marginBottom: 16, padding: isMobile ? '0 8px' : 0 }}>
             <Space>
               <Text style={{ fontSize: isMobile ? '14px' : '16px' }}>그룹별 설정 및 편차 관리</Text>
-              <Tooltip title="그룹을 생성하고 사용자를 그룹에 할당하여 칼로리 편차를 관리할 수 있습니다.">
+              <Tooltip title="선택한 날짜에 생성된 그룹만 표시됩니다. 그룹을 생성하고 사용자를 그룹에 할당할 수 있으며, 각 그룹 카드에서 칼로리 편차를 직접 설정하고 적용할 수 있습니다.">
                 <InfoCircleOutlined style={{ color: '#1677ff' }} />
               </Tooltip>
             </Space>
@@ -1109,7 +1279,18 @@ const CalorieAdminPage = () => {
               <Skeleton active paragraph={{ rows: 2 }} />
             </Space>
           ) : groups.length > 0 ? (
-             groups.sort((a, b) => {
+             groups.filter(group => {
+               // 기본 그룹은 항상 표시
+               if (group.isDefault) return true;
+               
+               // applicableDate가 없는 그룹은 표시하지 않음
+               if (!group.applicableDate) return false;
+               
+               // 선택된 날짜와 그룹의 적용 날짜가 같은 경우만 표시
+               const groupDate = dayjs(group.applicableDate.toDate()).format('YYYY-MM-DD');
+               const selectedDateStr = selectedDate.format('YYYY-MM-DD');
+               return groupDate === selectedDateStr;
+             }).sort((a, b) => {
                  if (a.id === DEFAULT_GROUP_ID) return -1;
                  if (b.id === DEFAULT_GROUP_ID) return 1;
                  if (a.isDefault && !b.isDefault) return -1;
@@ -1123,6 +1304,7 @@ const CalorieAdminPage = () => {
           )}
         </TabPane>
 
+
         <TabPane tab={<span><UserOutlined /> 개별 사용자</span>} key="users">
           <Row gutter={[8, 8]} style={{ marginBottom: 16, padding: isMobile ? '0 8px' : 0 }}>
             <Col xs={24} md={12}>
@@ -1134,7 +1316,15 @@ const CalorieAdminPage = () => {
                 <Option value={DEFAULT_GROUP_VALUE}>
                    <Tag color={groups.find(g => g.id === DEFAULT_GROUP_ID)?.color || '#8c8c8c'} style={{ marginRight: 3 }} /> 기본 그룹
                 </Option>
-                {groups.filter(g => !g.isDefault).sort((a, b) => a.name.localeCompare(b.name)).map(group => (
+                {groups.filter(g => {
+                  if (g.isDefault) return false; // 기본 그룹은 이미 위에서 처리됨
+                  if (!g.applicableDate) return false; // applicableDate가 없는 그룹은 제외
+                  
+                  // 선택된 날짜와 그룹의 적용 날짜가 같은 경우만 표시
+                  const groupDate = dayjs(g.applicableDate.toDate()).format('YYYY-MM-DD');
+                  const selectedDateStr = selectedDate.format('YYYY-MM-DD');
+                  return groupDate === selectedDateStr;
+                }).sort((a, b) => a.name.localeCompare(b.name)).map(group => (
                     <Option key={group.id} value={group.name}>
                         <Tag color={group.color} style={{ marginRight: 3 }} /> {group.name}
                     </Option>
@@ -1162,7 +1352,15 @@ const CalorieAdminPage = () => {
                <Option value={DEFAULT_GROUP_VALUE}>
                   <Tag color={groups.find(g => g.id === DEFAULT_GROUP_ID)?.color || '#8c8c8c'} style={{ marginRight: 5 }} /> 기본 그룹
                </Option>
-               {groups.filter(g => !g.isDefault).sort((a,b)=>a.name.localeCompare(b.name)).map(group => (
+               {groups.filter(g => {
+                 if (g.isDefault) return false; // 기본 그룹은 이미 위에서 처리됨
+                 if (!g.applicableDate) return false; // applicableDate가 없는 그룹은 제외
+                 
+                 // 선택된 날짜와 그룹의 적용 날짜가 같은 경우만 표시
+                 const groupDate = dayjs(g.applicableDate.toDate()).format('YYYY-MM-DD');
+                 const selectedDateStr = selectedDate.format('YYYY-MM-DD');
+                 return groupDate === selectedDateStr;
+               }).sort((a,b)=>a.name.localeCompare(b.name)).map(group => (
                   <Option key={group.id} value={group.name}>
                       <Tag color={group.color} style={{ marginRight: 5 }} /> {group.name}
                   </Option>
@@ -1177,29 +1375,68 @@ const CalorieAdminPage = () => {
           </Form.Item>
         </Form> )}
       </Modal>
-
-      <Modal title={<Text style={{ fontSize: '16px', fontWeight: '600' }}>그룹 편차 일괄 설정</Text>} open={isGroupSettingsModalVisible} onCancel={() => setIsGroupSettingsModalVisible(false)} footer={null} width={isMobile ? '90%' : 480} destroyOnClose>
-         {selectedGroupKey && ( <Form form={groupSettingsForm} onFinish={handleSaveGroupSettings} layout="vertical">
-          <Form.Item name="calorieBias" label="칼로리 편차" rules={[{ required: true, message: '칼로리 편차를 입력하세요.' }]}>
-            <InputNumber style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item>
-            <Button type="primary" htmlType="submit">저장</Button>
-          </Form.Item>
-        </Form> )}
-      </Modal>
       
-       <Modal title={<Text style={{ fontSize: '16px', fontWeight: '600' }}>{editingGroup ? '그룹 정보 수정' : '새 그룹 생성'}</Text>} open={isGroupEditModalVisible} onCancel={() => { setIsGroupEditModalVisible(false); setEditingGroup(null); }} footer={null} width={isMobile ? '90%' : 480} destroyOnClose>
-           <Form form={groupEditForm} layout="vertical" onFinish={handleSaveGroup} initialValues={editingGroup ? { ...editingGroup, color: editingGroup.color || '#1677ff' } : { name: '', description: '', color: '#1677ff' }}>
+       <Modal title={<Text style={{ fontSize: '16px', fontWeight: '600' }}>{editingGroup ? '그룹 정보 수정' : '새 그룹 생성'}</Text>} open={isGroupEditModalVisible} onCancel={() => { setIsGroupEditModalVisible(false); setEditingGroup(null); }} footer={null} width={isMobile ? '90%' : 600} destroyOnClose>
+           <Form form={groupEditForm} layout="vertical" onFinish={handleSaveGroup} initialValues={editingGroup ? { 
+             ...editingGroup, 
+             color: editingGroup.color || '#1677ff',
+             deviationMultiplier: editingGroup.deviationMultiplier || 0.2,
+             defaultDeviation: editingGroup.defaultDeviation || 0,
+
+           } : { 
+             name: '', 
+             description: '', 
+             color: '#1677ff',
+             deviationMultiplier: 0.2,
+             defaultDeviation: 0,
+
+           }}>
                <Form.Item name="name" label="그룹 이름" rules={[{ required: true, message: '그룹 이름을 입력하세요.' }]}>
                    <Input />
                </Form.Item>
                <Form.Item name="description" label="그룹 설명">
                    <Input.TextArea />
                </Form.Item>
+
                <Form.Item name="color" label="그룹 색상" rules={[{ required: true, message: '그룹 색상을 선택하세요.' }]}>
                    <ColorPicker />
                </Form.Item>
+               <Divider>편차 설정</Divider>
+               <Row gutter={16}>
+                 <Col span={12}>
+                   <Form.Item 
+                     name="deviationMultiplier" 
+                     label="편차 가산율 (%)"
+                     rules={[{ required: true, message: '편차 가산율을 입력하세요.' }]}
+                   >
+                     <InputNumber 
+                       style={{ width: '100%' }}
+                       min={0}
+                       max={1}
+                       step={0.01}
+                       formatter={value => `${(value * 100).toFixed(0)}%`}
+                       parser={value => value.replace('%', '') / 100}
+                       placeholder="20%"
+                     />
+                   </Form.Item>
+                 </Col>
+                 <Col span={12}>
+                   <Form.Item 
+                     name="defaultDeviation" 
+                     label="기본 편차값 (kcal)"
+                     rules={[{ required: true, message: '기본 편차값을 입력하세요.' }]}
+                   >
+                     <InputNumber 
+                       style={{ width: '100%' }}
+                       placeholder="0"
+                     />
+                   </Form.Item>
+                 </Col>
+               </Row>
+               <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginBottom: 16 }}>
+                 편차 가산율: 칼로리 차이에 곱해지는 비율 (기본값: 20%)<br/>
+                 기본 편차값: 편차 계산 시 사용되는 기본값 (기본값: 0kcal)
+               </Text>
                <Form.Item>
                    <Button type="primary" htmlType="submit">저장</Button>
                </Form.Item>
@@ -1357,7 +1594,6 @@ const CalorieAdminPage = () => {
             </div>
           )}
         </Modal>
-
     </div>
   );
 };

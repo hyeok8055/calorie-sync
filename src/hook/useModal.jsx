@@ -45,15 +45,19 @@ export const useModal = (foodData, testMode = false) => {
     if (!foodData || !foodData[mealType]) return null;
     
     const meal = foodData[mealType];
-    // estimatedCalories 또는 actualCalories 가 null 또는 undefined 이면 계산 불가
-    if (meal.actualCalories === null || meal.estimatedCalories === null || meal.actualCalories === undefined || meal.estimatedCalories === undefined) return null;
+    // originalCalories의 estimated 또는 actual이 null 또는 undefined이면 계산 불가
+    const estimatedCalories = meal.originalCalories?.estimated;
+    const actualCalories = meal.originalCalories?.actual;
     
-    const originalDifference = meal.actualCalories - meal.estimatedCalories;
-    // meal.offset 값이 숫자 형태(0 포함)로 존재하면 사용, 아니면 0으로 간주
-    const offset = (typeof meal.offset === 'number') ? meal.offset : 0; 
-
-    // 최종 차이 = 원본 차이 + offset
-    return originalDifference + offset; 
+    if (actualCalories === null || estimatedCalories === null || actualCalories === undefined || estimatedCalories === undefined) return null;
+    
+    // calorieOffset이 있으면 그 값을 사용, 없으면 기본 차이값 사용
+    if (meal.calorieOffset !== undefined && meal.calorieOffset !== null) {
+      return meal.calorieOffset;
+    }
+    
+    // 기본 차이값 반환
+    return actualCalories - estimatedCalories;
 
   }, [foodData]);
 
@@ -61,16 +65,22 @@ export const useModal = (foodData, testMode = false) => {
   const getOriginalCalorieDifference = useCallback((mealType) => {
       if (!foodData || !foodData[mealType]) return null;
       const meal = foodData[mealType];
-      if (meal.actualCalories === null || meal.estimatedCalories === null || meal.actualCalories === undefined || meal.estimatedCalories === undefined) return null;
-      return meal.actualCalories - meal.estimatedCalories;
+      const estimatedCalories = meal.originalCalories?.estimated;
+      const actualCalories = meal.originalCalories?.actual;
+      
+      if (actualCalories === null || estimatedCalories === null || actualCalories === undefined || estimatedCalories === undefined) return null;
+      return actualCalories - estimatedCalories;
   }, [foodData]);
 
-   // offset 값만 반환하는 함수
-   const getMealOffset = useCallback((mealType) => {
+   // appliedDeviation 값만 반환하는 함수 (기존 offset)
+   const getMealAppliedDeviation = useCallback((mealType) => {
        if (!foodData || !foodData[mealType]) return null;
        const meal = foodData[mealType];
-       return (typeof meal.offset === 'number') ? meal.offset : 0;
+       return meal.calorieOffset || 0;
    }, [foodData]);
+   
+   // 기존 함수명 호환성을 위한 별칭
+   const getMealOffset = getMealAppliedDeviation;
 
   const showCalorieDifferenceModal = useCallback((mealType, isAutoShow = false) => {
     // 테스트 모드일 때는 기본값 표시
@@ -142,7 +152,7 @@ export const useModal = (foodData, testMode = false) => {
 
     // 실제 섭취 칼로리(y) 계산
     const meal = foodData[mealType];
-    const actualCalories = meal.actualCalories;
+    const actualCalories = meal.originalCalories?.actual;
     const beta = difference; // β = y - ŷ (오차)
     
     // 3가지 케이스 분류
@@ -436,6 +446,7 @@ export const useModal = (foodData, testMode = false) => {
     isAutoModalAvailable: checkAutoModalAvailable().available,
     calculateCalorieDifference,
     getOriginalCalorieDifference,
-    getMealOffset
+    getMealOffset, // 기존 호환성
+    getMealAppliedDeviation // 새로운 표준화된 함수명
   };
 };

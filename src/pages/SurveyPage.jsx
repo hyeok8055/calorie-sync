@@ -5,6 +5,7 @@ import { useSelector } from 'react-redux';
 import { db } from '../firebaseconfig';
 import { collection, addDoc, serverTimestamp, query, where, getDocs, setDoc, doc, getDoc } from 'firebase/firestore';
 import { useFood } from '../hook/useFood';
+import useCalorieDeviation from '../hook/useCalorieDeviation';
 
 const SurveyPage = () => {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ const SurveyPage = () => {
   const user = useSelector((state) => state.auth.user);
   const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
   const { foodData } = useFood();
+  const { calculateFinalDifference } = useCalorieDeviation();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [q6Answer, setQ6Answer] = useState(null);
@@ -31,10 +33,11 @@ const SurveyPage = () => {
       console.log(lunch)
       if (lunch.actualCalories !== null && lunch.actualCalories !== undefined && 
           lunch.estimatedCalories !== null && lunch.estimatedCalories !== undefined) {
-        // offset 반영하여 실제 칼로리 계산
-        const actualCaloriesWithOffset = lunch.actualCalories + (lunch.offset || 0);
-        const difference = lunch.estimatedCalories - actualCaloriesWithOffset;
-        console.log('Calorie difference (with offset):', difference)
+        // 새로운 훅을 사용하여 최종 차이 계산
+        const finalDifference = calculateFinalDifference(lunch, 0);
+        // 예상보다 적게 섭취한 경우를 위해 부호 반전
+        const difference = -finalDifference;
+        console.log('Calorie difference (with applied deviation):', difference)
         
         // 편차가 양수일 때만 표시 (예상보다 적게 섭취한 경우)
         // 실제 섭취 칼로리가 예측 칼로리보다 높은 경우에는 6번 질문 숨김
@@ -45,7 +48,7 @@ const SurveyPage = () => {
         }
       }
     }
-  }, [foodData]);
+  }, [foodData, calculateFinalDifference]);
 
   // 시간 제한 상태 확인
   const [timeRestricted, setTimeRestricted] = useState(false);
