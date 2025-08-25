@@ -51,9 +51,9 @@ export const useModal = (foodData, testMode = false) => {
     
     if (actualCalories === null || estimatedCalories === null || actualCalories === undefined || estimatedCalories === undefined) return null;
     
-    // calorieOffset이 있으면 그 값을 사용, 없으면 기본 차이값 사용
-    if (meal.calorieOffset !== undefined && meal.calorieOffset !== null) {
-      return meal.calorieOffset;
+    // calorieDeviation.applied가 있으면 그 값을 사용, 없으면 기본 차이값 사용
+    if (meal.calorieDeviation?.applied !== undefined && meal.calorieDeviation?.applied !== null) {
+      return meal.calorieDeviation.applied;
     }
     
     // 기본 차이값 반환
@@ -76,67 +76,13 @@ export const useModal = (foodData, testMode = false) => {
    const getMealAppliedDeviation = useCallback((mealType) => {
        if (!foodData || !foodData[mealType]) return null;
        const meal = foodData[mealType];
-       return meal.calorieOffset || 0;
+       return meal.calorieDeviation?.applied || 0;
    }, [foodData]);
    
    // 기존 함수명 호환성을 위한 별칭
    const getMealOffset = getMealAppliedDeviation;
 
   const showCalorieDifferenceModal = useCallback((mealType, isAutoShow = false) => {
-    // 테스트 모드일 때는 기본값 표시
-    if (testMode) {
-      const testContent = (
-        <>
-          <div style={{ 
-            display: 'flex', 
-            flexDirection: 'column',
-            justifyContent: 'center', 
-            alignItems: 'center', 
-            width: '100%',
-            marginTop: '10px'
-          }}>
-            <Text style={{ 
-              fontSize: '18px', 
-              textAlign: 'center', 
-              marginBottom: '15px',
-              color: '#888',
-              fontWeight: '600' 
-            }}>
-              완벽해요! 예측과 거의 일치합니다
-            </Text>
-            <div style={{
-              backgroundColor: '#f8f8f8',
-              borderRadius: '10px',
-              padding: '15px 20px',
-              width: '90%',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center'
-            }}>
-              <Text 
-                style={{ 
-                  fontSize: '24px', 
-                  fontWeight: '700', 
-                  color: '#888',
-                  display: 'flex',
-                  alignItems: 'center'
-                }}
-              >
-                ±0kcal
-              </Text>
-            </div>
-          </div>
-        </>
-      );
-
-      Modal.alert({
-        title: '테스트 모드: 식사 결과',
-        content: testContent,
-        confirmText: '확인했습니다.',
-      });
-      return;
-    }
-
     // 실제 데이터 확인
     const difference = calculateCalorieDifference(mealType);
     
@@ -292,10 +238,10 @@ export const useModal = (foodData, testMode = false) => {
     if (allowedMealType) {
       const meal = foodData[allowedMealType];
       const hasData = meal && 
-        meal.actualCalories !== undefined && 
-        meal.actualCalories !== null &&
-        meal.estimatedCalories !== undefined && 
-        meal.estimatedCalories !== null;
+        meal.originalCalories?.actual !== undefined && 
+        meal.originalCalories?.actual !== null &&
+        meal.originalCalories?.estimated !== undefined && 
+        meal.originalCalories?.estimated !== null;
       
       const notViewed = !viewedMeals[allowedMealType];
       
@@ -310,10 +256,10 @@ export const useModal = (foodData, testMode = false) => {
     for (const mealType of mealsToCheck) {
       const meal = foodData[mealType];
       const hasData = meal && 
-        meal.actualCalories !== undefined && 
-        meal.actualCalories !== null &&
-        meal.estimatedCalories !== undefined && 
-        meal.estimatedCalories !== null;
+        meal.originalCalories?.actual !== undefined && 
+        meal.originalCalories?.actual !== null &&
+        meal.originalCalories?.estimated !== undefined && 
+        meal.originalCalories?.estimated !== null;
       
       const notViewed = !viewedMeals[mealType];
       
@@ -355,8 +301,8 @@ export const useModal = (foodData, testMode = false) => {
 
     // 해당 시간대에 표시할 식사 데이터가 있는지 확인
     const hasData = mealType && foodData?.[mealType] && 
-      (foodData[mealType].actualCalories !== undefined && 
-       foodData[mealType].estimatedCalories !== undefined);
+      (foodData[mealType].originalCalories?.actual !== undefined && 
+       foodData[mealType].originalCalories?.estimated !== undefined);
 
     return { 
       available: hasData, 
