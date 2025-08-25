@@ -31,12 +31,13 @@ const ADMIN_EMAILS = [
 const SidePopUp = ({ visible, onClose, onLogout, userName, email }) => {
   const [userInfo, setUserInfo] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [surveyStatus, setSurveyStatus] = useState({ isActive: false, surveyId: null });
   const uid = useSelector((state) => state.auth.user?.uid);
   const [form] = Form.useForm();
   const navigate = useNavigate();
-  const { activateSurvey, deactivateSurvey, loading: surveyLoading } = useSurvey();
+  const { activateSurvey, deactivateSurvey, checkGlobalSurveyStatus, loading: surveyLoading } = useSurvey();
 
-  // 사용자 정보 불러오기
+  // 사용자 정보 및 설문조사 상태 불러오기
   useEffect(() => {
     const fetchUserInfo = async () => {
       if (uid) {
@@ -48,10 +49,21 @@ const SidePopUp = ({ visible, onClose, onLogout, userName, email }) => {
       }
     };
 
+    const fetchSurveyStatus = async () => {
+      try {
+        const status = await checkGlobalSurveyStatus();
+        setSurveyStatus(status || { isActive: false, surveyId: null });
+      } catch (error) {
+        console.error('설문조사 상태 확인 실패:', error);
+        setSurveyStatus({ isActive: false, surveyId: null });
+      }
+    };
+
     if (visible) {
       fetchUserInfo();
+      fetchSurveyStatus();
     }
-  }, [uid, visible]);
+  }, [uid, visible, checkGlobalSurveyStatus]);
 
   const handleEdit = () => {
     setIsEditing(true);
@@ -102,24 +114,46 @@ const SidePopUp = ({ visible, onClose, onLogout, userName, email }) => {
     onClose();
   };
 
-  const handleSurveyActivation = async () => {
+  const handleSurveyToggle = async () => {
     try {
-      const result = await activateSurvey();
-      if (result.success) {
-        Toast.show({
-          icon: <CheckCircleOutline />,
-          content: '설문조사가 활성화되었습니다. 모든 사용자에게 알림이 전송됩니다.',
-          duration: 3000
-        });
+      let result;
+      if (surveyStatus.isActive) {
+        // 설문조사 비활성화
+        result = await deactivateSurvey();
+        if (result.success) {
+          setSurveyStatus({ isActive: false, surveyId: null });
+          Toast.show({
+            icon: <CheckCircleOutline />,
+            content: '설문조사가 종료되었습니다.',
+            duration: 3000
+          });
+        } else {
+          Toast.show({
+            icon: <CloseCircleOutline />,
+            content: '설문조사 종료에 실패했습니다.',
+            duration: 3000
+          });
+        }
       } else {
-        Toast.show({
-          icon: <CloseCircleOutline />,
-          content: '설문조사 활성화에 실패했습니다.',
-          duration: 3000
-        });
+        // 설문조사 활성화
+        result = await activateSurvey();
+        if (result.success) {
+          setSurveyStatus({ isActive: true, surveyId: result.surveyId });
+          Toast.show({
+            icon: <CheckCircleOutline />,
+            content: '설문조사가 활성화되었습니다. 모든 사용자에게 알림이 전송됩니다.',
+            duration: 3000
+          });
+        } else {
+          Toast.show({
+            icon: <CloseCircleOutline />,
+            content: '설문조사 활성화에 실패했습니다.',
+            duration: 3000
+          });
+        }
       }
     } catch (error) {
-      console.error('설문조사 활성화 오류:', error);
+      console.error('설문조사 상태 변경 오류:', error);
       Toast.show({
         icon: <CloseCircleOutline />,
         content: '오류가 발생했습니다.',
@@ -204,11 +238,15 @@ const SidePopUp = ({ visible, onClose, onLogout, userName, email }) => {
                   block 
                   fill='outline' 
                   shape='rounded' 
-                  color='warning' 
-                  onClick={handleSurveyActivation}
+                  color={surveyStatus.isActive ? 'danger' : 'warning'}
+                  onClick={handleSurveyToggle}
                   loading={surveyLoading}
                 >
-                  <Space align='center'><span style={{ fontFamily: 'Pretendard-600' }}>설문조사 실행</span></Space>
+                  <Space align='center'>
+                    <span style={{ fontFamily: 'Pretendard-600' }}>
+                      {surveyStatus.isActive ? '설문조사 종료' : '설문조사 실행'}
+                    </span>
+                  </Space>
                 </Button>
               )}
             </div>

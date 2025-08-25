@@ -654,8 +654,13 @@ const CalorieAdminPage = () => {
     groupUsers.forEach(user => {
         const foodData = user.foodDocForSelectedDate;
         const mealData = foodData ? foodData[selectedMealType] : null;
-        if (mealData && mealData.actualCalories !== null && mealData.actualCalories !== undefined && mealData.estimatedCalories !== null && mealData.estimatedCalories !== undefined) {
-            totalSpecificDifference += (mealData.actualCalories - mealData.estimatedCalories);
+        
+        // 새로운 데이터 구조 (originalCalories) 및 기존 구조 모두 지원
+        const actualCalories = mealData?.originalCalories?.actual ?? mealData?.actualCalories;
+        const estimatedCalories = mealData?.originalCalories?.estimated ?? mealData?.estimatedCalories;
+        
+        if (mealData && actualCalories !== null && actualCalories !== undefined && estimatedCalories !== null && estimatedCalories !== undefined) {
+            totalSpecificDifference += (actualCalories - estimatedCalories);
             countWithSpecificData++;
         }
     });
