@@ -238,8 +238,6 @@ const CalorieAdminPage = () => {
       setLoadingUsers(false);
     }
   }, []);
-  
-  // 날짜별 그룹 관리 및 미래 편차 설정 관련 함수들 제거됨
 
   // 데이터 로딩 통합 (selectedDate 변경 시 사용자 데이터 다시 로드)
   const loadData = useCallback(async () => {
@@ -456,10 +454,6 @@ const CalorieAdminPage = () => {
       message.error('사용자 설정 업데이트에 실패했습니다.');
     }
   };
-
-
-
-
 
   // 사용자 추가 모달
   const handleOpenAddUserModal = (group) => {
@@ -898,15 +892,37 @@ const CalorieAdminPage = () => {
       render: (_, record) => {
         const foodData = record.foodDocForSelectedDate;
         const mealData = foodData ? foodData[selectedMealType] : null;
-        if (!mealData || mealData.actualCalories === null || mealData.estimatedCalories === null) {
+        
+        // 새로운 데이터 구조와 기존 데이터 구조 모두 지원
+        let estimatedCalories = null;
+        let actualCalories = null;
+        let appliedDeviation = null;
+        
+        if (mealData) {
+          // 새로운 데이터 구조 (originalCalories 사용)
+          if (mealData.originalCalories) {
+            estimatedCalories = mealData.originalCalories.estimated;
+            actualCalories = mealData.originalCalories.actual;
+            appliedDeviation = mealData.calorieDeviation?.applied || mealData.offset || 0;
+          } 
+          // 기존 데이터 구조 (estimatedCalories, actualCalories 직접 사용)
+          else {
+            estimatedCalories = mealData.estimatedCalories;
+            actualCalories = mealData.actualCalories;
+            appliedDeviation = mealData.offset || 0;
+          }
+        }
+        
+        if (!mealData || estimatedCalories === null || actualCalories === null) {
             return <Text type="secondary">기록 없음</Text>;
         }
-        const originalDifference = mealData.actualCalories - mealData.estimatedCalories;
-        const appliedDeviation = mealData.offset; // 기존 필드명 유지 (추후 변경 예정)
-        const finalDifference = originalDifference + (appliedDeviation ?? 0);
+        
+        const originalDifference = actualCalories - estimatedCalories;
+        const finalDifference = appliedDeviation ?? originalDifference;
+        
         return (
              <Space direction="vertical" size={0}>
-                <Text>예:{mealData.estimatedCalories} / 실:{mealData.actualCalories}</Text>
+                <Text>예:{estimatedCalories} / 실:{actualCalories}</Text>
                 <Space>
                    <Tooltip title={`원본차(${originalDifference})`}><Text style={{ color: originalDifference > 0 ? '#ff4d4f' : originalDifference < 0 ? '#1677ff' : 'inherit' }}>({originalDifference>0?'+':''}{originalDifference})</Text></Tooltip>
                    {appliedDeviation !== null && appliedDeviation !== 0 && (<Tooltip title={`적용편차(${appliedDeviation})`}><Text strong style={{ color: finalDifference > 0 ? '#ff4d4f' : finalDifference < 0 ? '#1677ff' : 'inherit' }}>→{finalDifference>0?'+':''}{finalDifference}</Text></Tooltip>)}
@@ -984,12 +1000,32 @@ const CalorieAdminPage = () => {
                      <Text type="secondary">최근 식사 ({selectedDate.format('MM/DD')} {mealTypeKoreanMap[selectedMealType]}): </Text>
                      {(() => {
                         const mealData = r.foodDocForSelectedDate[selectedMealType];
-                        if (mealData && mealData.actualCalories !== null && mealData.estimatedCalories !== null) {
-                            const originalDifference = mealData.actualCalories - mealData.estimatedCalories;
-                            const appliedDeviation = mealData.offset; // 기존 필드명 유지 (추후 변경 예정)
-                            const finalDifference = originalDifference + (appliedDeviation ?? 0);
+                        
+                        // 새로운 데이터 구조와 기존 데이터 구조 모두 지원
+                        let estimatedCalories = null;
+                        let actualCalories = null;
+                        let appliedDeviation = null;
+                        
+                        if (mealData) {
+                          // 새로운 데이터 구조 (originalCalories 사용)
+                          if (mealData.originalCalories) {
+                            estimatedCalories = mealData.originalCalories.estimated;
+                            actualCalories = mealData.originalCalories.actual;
+                            appliedDeviation = mealData.calorieDeviation?.applied || mealData.offset || 0;
+                          } 
+                          // 기존 데이터 구조 (estimatedCalories, actualCalories 직접 사용)
+                          else {
+                            estimatedCalories = mealData.estimatedCalories;
+                            actualCalories = mealData.actualCalories;
+                            appliedDeviation = mealData.offset || 0;
+                          }
+                        }
+                        
+                        if (mealData && estimatedCalories !== null && actualCalories !== null) {
+                            const originalDifference = actualCalories - estimatedCalories;
+                            const finalDifference = appliedDeviation ?? originalDifference;
                             return (
-                                 <Tooltip title={`실제: ${mealData.actualCalories}, 예상: ${mealData.estimatedCalories}, 적용편차: ${appliedDeviation ?? 0}`}>
+                                 <Tooltip title={`실제: ${actualCalories}, 예상: ${estimatedCalories}, 적용편차: ${appliedDeviation ?? 0}`}>
                                      <Text style={{ color: finalDifference > 0 ? '#ff4d4f' : finalDifference < 0 ? '#1677ff' : 'inherit' }}>
                                           {finalDifference > 0 ? '+' : ''}{finalDifference} kcal
                                      </Text>
@@ -1199,90 +1235,6 @@ const CalorieAdminPage = () => {
       setExportLoading(false);
       setExportProgress(0);
       setExportTotal(0);
-    }
-  };
-
-  // 개별 사용자 편차 적용 함수 (과거/미래 자동 구분)
-  const handleApplyMealDeviation = async (userId, targetDate, mealType, deviation) => {
-    try {
-      const dateString = typeof targetDate === 'string' ? targetDate : targetDate.format('YYYY-MM-DD');
-      const today = dayjs().format('YYYY-MM-DD');
-      const isPastDate = dayjs(dateString).isBefore(today, 'day');
-      const isFutureDate = dayjs(dateString).isAfter(today, 'day');
-      
-      const userInfo = users.find(u => u.key === userId);
-      if (!userInfo) {
-        message.error('사용자 정보를 찾을 수 없습니다.');
-        return;
-      }
-      
-      // 편차 적용 (자동 계산 모드로 내부적으로 과거/미래 구분 처리)
-      await applyDeviation(userId, dateString, mealType, deviation, true);
-      
-      const actionType = isPastDate ? '수정' : isFutureDate ? '설정' : '적용';
-      message.success(`${userInfo.name || userInfo.email}의 ${dateString} ${mealTypeKoreanMap[mealType]} 편차 ${actionType} 완료`);
-      
-      // 현재 선택된 날짜가 적용한 날짜와 같으면 데이터 리로드
-      if (selectedDate.format('YYYY-MM-DD') === dateString) {
-        await loadData();
-      }
-      
-    } catch (error) {
-      console.error('편차 적용 실패:', error);
-      message.error('편차 적용에 실패했습니다.');
-    }
-  };
-
-  // 그룹 편차 적용 함수 (과거/미래 자동 구분)
-  const handleApplyGroupMealDeviation = async (groupKeyOrId, targetDate, mealType) => {
-    try {
-      const dateString = typeof targetDate === 'string' ? targetDate : targetDate.format('YYYY-MM-DD');
-      const today = dayjs().format('YYYY-MM-DD');
-      const isPastDate = dayjs(dateString).isBefore(today, 'day');
-      const isFutureDate = dayjs(dateString).isAfter(today, 'day');
-      
-      // 그룹 유효성 검사
-      const isValidGroup = groupKeyOrId === DEFAULT_GROUP_VALUE || 
-                          groups.some(g => g.name === groupKeyOrId || (g.isDefault && groupKeyOrId === DEFAULT_GROUP_VALUE));
-      
-      if (!isValidGroup) {
-        message.error('유효하지 않은 그룹입니다.');
-        return;
-      }
-      
-      // 기본 그룹 시스템만 사용 (날짜별 그룹 제거)
-      const targetUsers = users.filter(user => user.group === groupKeyOrId);
-      
-      if (targetUsers.length === 0) {
-        message.info('대상 사용자가 없습니다.');
-        return;
-      }
-      
-      const userIds = targetUsers.map(user => user.key);
-      const effectiveGroupId = groupKeyOrId === DEFAULT_GROUP_VALUE ? DEFAULT_GROUP_ID : 
-         groups.find(g => g.name === groupKeyOrId)?.id;
-      
-      // 그룹 편차 적용 (자동 계산 모드로 내부적으로 과거/미래 구분 처리)
-      const result = await applyGroupDeviation(userIds, dateString, mealType, null, true, effectiveGroupId);
-      
-      if (!result.success) {
-        throw new Error(result.error || '그룹 편차 적용에 실패했습니다.');
-      }
-      
-      const groupName = groupKeyOrId === DEFAULT_GROUP_VALUE ? '기본 그룹' : 
-         (groups.find(g => g.name === groupKeyOrId)?.name || groupKeyOrId);
-      
-      const actionType = isPastDate ? '수정' : isFutureDate ? '설정' : '적용';
-      message.success(`${groupName}의 ${dateString} ${mealTypeKoreanMap[mealType]} 편차 ${actionType} 완료 (${targetUsers.length}명)`);
-      
-      // 현재 선택된 날짜가 적용한 날짜와 같으면 데이터 리로드
-      if (selectedDate.format('YYYY-MM-DD') === dateString) {
-        await loadData();
-      }
-      
-    } catch (error) {
-      console.error('과거 그룹 편차 재적용 실패:', error);
-      message.error('과거 그룹 편차 재적용에 실패했습니다.');
     }
   };
 
