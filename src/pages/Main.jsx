@@ -39,7 +39,7 @@ const Main = () => {
   const [showSurveyNotification, setShowSurveyNotification] = useState(false);
   const navigate = useNavigate();
 
-  const { showModal, showAutoModal, isModalAvailable, isAutoModalAvailable } = useModal(foodData);
+  const { showModal, showAutoModal, isModalAvailable, isAutoModalAvailable } = useModal();
 
   // 자동 모달 표시를 위한 useEffect 추가
   useEffect(() => {

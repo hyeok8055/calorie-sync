@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { Modal } from 'antd-mobile';
 import { Typography } from 'antd';
 import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
+import { useFood } from './useFood';
 
 const { Text } = Typography;
 
-export const useModal = (foodData, testMode = false) => {
+export const useModal = (testMode = false) => {
+  const { foodData, yesterdayFoodData } = useFood();
   const [viewedMeals, setViewedMeals] = useState({
     breakfast: false,
     lunch: false,
@@ -42,9 +44,11 @@ export const useModal = (foodData, testMode = false) => {
   }, [viewedMeals]);
 
   const calculateCalorieDifference = useCallback((mealType) => {
-    if (!foodData || !foodData[mealType]) return null;
+    // 저녁 식사는 어제 데이터를 사용, 나머지는 오늘 데이터 사용
+    const dataSource = mealType === 'dinner' ? yesterdayFoodData : foodData;
+    if (!dataSource || !dataSource[mealType]) return null;
     
-    const meal = foodData[mealType];
+    const meal = dataSource[mealType];
     // originalCalories의 estimated 또는 actual이 null 또는 undefined이면 계산 불가
     const estimatedCalories = meal.originalCalories?.estimated;
     const actualCalories = meal.originalCalories?.actual;
@@ -59,30 +63,37 @@ export const useModal = (foodData, testMode = false) => {
     // 기본 차이값 반환
     return actualCalories - estimatedCalories;
 
-  }, [foodData]);
+  }, [foodData, yesterdayFoodData]);
 
   // 필요에 따라 원본 차이만 반환하는 함수도 추가 가능
   const getOriginalCalorieDifference = useCallback((mealType) => {
-      if (!foodData || !foodData[mealType]) return null;
-      const meal = foodData[mealType];
+      // 저녁 식사는 어제 데이터를 사용, 나머지는 오늘 데이터 사용
+      const dataSource = mealType === 'dinner' ? yesterdayFoodData : foodData;
+      if (!dataSource || !dataSource[mealType]) return null;
+      const meal = dataSource[mealType];
       const estimatedCalories = meal.originalCalories?.estimated;
       const actualCalories = meal.originalCalories?.actual;
       
       if (actualCalories === null || estimatedCalories === null || actualCalories === undefined || estimatedCalories === undefined) return null;
       return actualCalories - estimatedCalories;
-  }, [foodData]);
+  }, [foodData, yesterdayFoodData]);
 
    // appliedDeviation 값만 반환하는 함수 (기존 offset)
    const getMealAppliedDeviation = useCallback((mealType) => {
-       if (!foodData || !foodData[mealType]) return null;
-       const meal = foodData[mealType];
+       // 저녁 식사는 어제 데이터를 사용, 나머지는 오늘 데이터 사용
+       const dataSource = mealType === 'dinner' ? yesterdayFoodData : foodData;
+       if (!dataSource || !dataSource[mealType]) return null;
+       const meal = dataSource[mealType];
        return meal.calorieDeviation?.applied || 0;
-   }, [foodData]);
+   }, [foodData, yesterdayFoodData]);
    
    // 기존 함수명 호환성을 위한 별칭
    const getMealOffset = getMealAppliedDeviation;
 
   const showCalorieDifferenceModal = useCallback((mealType, isAutoShow = false) => {
+    // 저녁 식사는 어제 데이터를 사용, 나머지는 오늘 데이터 사용
+    const dataSource = mealType === 'dinner' ? yesterdayFoodData : foodData;
+    
     // 실제 데이터 확인
     const difference = calculateCalorieDifference(mealType);
     
@@ -97,7 +108,7 @@ export const useModal = (foodData, testMode = false) => {
     }
 
     // 실제 섭취 칼로리(y) 계산
-    const meal = foodData[mealType];
+    const meal = dataSource?.[mealType];
     const actualCalories = meal.originalCalories?.actual;
     const beta = difference; // β = y - ŷ (오차)
     
@@ -260,7 +271,9 @@ export const useModal = (foodData, testMode = false) => {
     const mealsToCheck = ['breakfast', 'lunch', 'dinner'];
     
     for (const mealType of mealsToCheck) {
-      const meal = foodData[mealType];
+      // 저녁 식사는 어제 데이터를 사용, 나머지는 오늘 데이터 사용
+      const dataSource = mealType === 'dinner' ? yesterdayFoodData : foodData;
+      const meal = dataSource?.[mealType];
       const hasData = meal && 
         meal.originalCalories?.actual !== undefined && 
         meal.originalCalories?.actual !== null &&
@@ -307,9 +320,11 @@ export const useModal = (foodData, testMode = false) => {
     }
 
     // 해당 시간대에 표시할 식사 데이터가 있는지 확인
-    const hasData = mealType && foodData?.[mealType] && 
-      (foodData[mealType].originalCalories?.actual !== undefined && 
-       foodData[mealType].originalCalories?.estimated !== undefined);
+    // 저녁 식사는 어제 데이터를 사용, 나머지는 오늘 데이터 사용
+    const dataSource = mealType === 'dinner' ? yesterdayFoodData : foodData;
+    const hasData = mealType && dataSource?.[mealType] && 
+      (dataSource[mealType].originalCalories?.actual !== undefined && 
+       dataSource[mealType].originalCalories?.estimated !== undefined);
 
     return { 
       available: hasData, 

@@ -65,8 +65,19 @@ const calculateCalorieOffset = (estimatedCalories, actualCalories, groupSettings
   return Math.round(offset);
 };
 
+// 어제 날짜 가져오기 함수 추가
+const getYesterdayDate = () => {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const year = yesterday.getFullYear();
+  const month = String(yesterday.getMonth() + 1).padStart(2, '0');
+  const day = String(yesterday.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export const useFood = () => {
   const [foodData, setFoodData] = useState(null);
+  const [yesterdayFoodData, setYesterdayFoodData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const uid = useSelector((state) => state.auth.user?.uid);
@@ -88,8 +99,25 @@ export const useFood = () => {
     setLoading(true);
     try {
       const today = getTodayDate();
+      const yesterday = getYesterdayDate();
+      
+      // 오늘 데이터 가져오기
       const docRef = doc(db, 'users', uid, 'foods', today);
       const docSnap = await getDoc(docRef);
+      
+      // 어제 저녁 식사 데이터만 가져오기 (최적화)
+      const yesterdayDocRef = doc(db, 'users', uid, 'foods', yesterday);
+      const yesterdayDocSnap = await getDoc(yesterdayDocRef);
+      
+      if (yesterdayDocSnap.exists()) {
+        const yesterdayData = yesterdayDocSnap.data();
+        // 저녁 식사 데이터만 추출
+        setYesterdayFoodData({
+          dinner: yesterdayData.dinner || null
+        });
+      } else {
+        setYesterdayFoodData(null);
+      }
       
       if (docSnap.exists()) {
         setFoodData(docSnap.data());
@@ -696,5 +724,5 @@ export const useFood = () => {
     }
   }, [getGroupDeviationSettings, getPersonalCalorieBias]);
 
-  return { loading, error, foodData, saveFoodData, fetchFoodDetails, applyGroupDeviation, calculateCalorieOffset };
+  return { loading, error, foodData, yesterdayFoodData, saveFoodData, fetchFoodDetails, applyGroupDeviation, calculateCalorieOffset };
 };
