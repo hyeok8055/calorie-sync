@@ -16,26 +16,37 @@ export const useAuth = () => {
           const userDoc = await getDoc(userDocRef);
           const userData = userDoc.exists() ? userDoc.data() : {};
 
+          // Redux에 필요한 필드만 선택적으로 포함 (Timestamp 필드 제외)
+          const {
+            createdAt, 
+            lastLoginAt, 
+            ...safeUserData 
+          } = userData;
+
           const serializedUser = {
             uid: user.uid,
             displayName: user.displayName,
             email: user.email,
             setupCompleted: userData?.setupCompleted || false,
+            ...safeUserData // Timestamp가 제외된 안전한 사용자 데이터
           };
-          // console.log("User authenticated (hook):", serializedUser);
+          
           dispatch(setAuthStatus(serializedUser));
+          
         } catch (error) {
-          console.error("Error fetching user data from Firestore (hook):", error);
+          console.error('Firestore 사용자 데이터 조회 실패:', error);
+          
           // Firestore 읽기 오류 시 기본 정보로 dispatch
-          dispatch(setAuthStatus({
+          const fallbackUser = {
             uid: user.uid,
             displayName: user.displayName,
             email: user.email,
             setupCompleted: false, // 안전한 기본값
-          }));
+          };
+          
+          dispatch(setAuthStatus(fallbackUser));
         }
       } else {
-        // console.log("User logged out (hook).");
         dispatch(clearAuthStatus());
       }
     });
@@ -46,4 +57,4 @@ export const useAuth = () => {
 
   // 이 훅은 상태를 직접 반환하기보다는 effect 실행에 중점을 둡니다.
   // 필요하다면 여기서 auth 상태를 반환하도록 수정할 수 있습니다.
-}; 
+};

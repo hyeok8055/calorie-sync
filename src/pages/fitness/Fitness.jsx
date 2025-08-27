@@ -105,7 +105,7 @@ export default () => {
 
     try {
       await uploadData(formattedDate, Number(weight), exercises);
-      // console.log("Data uploaded successfully!");
+      
       // 달력 데이터 업데이트
       setCalendarData(prevCalendarData => ({
         ...prevCalendarData,
@@ -205,7 +205,7 @@ export default () => {
         <Calendar
           selectionMode="single"
           onChange={(val) => {
-            // console.log(val);
+    
           }}
           defaultValue={today}
           nextYearButton={false}

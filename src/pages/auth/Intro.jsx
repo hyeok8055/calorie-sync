@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Form, Input, Select, Button, Radio, Card, Typography, Row, Col } from 'antd';
+import { Form, Input, Select, Button, Radio, Card, Typography, Row, Col, message, Spin } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebaseconfig';
@@ -14,8 +14,16 @@ const Intro = () => {
   const dispatch = useDispatch();
   const [form] = Form.useForm();
   const [showCustomGoal, setShowCustomGoal] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const onFinish = async (values) => {
+    if (!uid) {
+      message.error('사용자 정보를 찾을 수 없습니다. 다시 로그인해주세요.');
+      return;
+    }
+
+    setLoading(true);
+    
     try {
       const userRef = doc(db, "users", uid);
       
@@ -28,21 +36,40 @@ const Intro = () => {
         goal: finalGoal,
         setupCompleted: true
       };
-
+      
       // Firestore 업데이트
       await updateDoc(userRef, userData);
 
       // Redux 상태 업데이트
-      dispatch(setAuthStatus({
+      const updatedUserData = {
         ...userData,
         uid,
         setupCompleted: true
-      }));
-
-      // 모든 처리가 완료된 후 메인 페이지로 이동
-      navigate('/main');
+      };
+      
+      dispatch(setAuthStatus(updatedUserData));
+      
+      // 성공 메시지 표시
+      message.success('프로필 설정이 완료되었습니다!');
+      
+      // 약간의 지연 후 라우팅 (Redux 상태 업데이트 완료 대기)
+      setTimeout(() => {
+        navigate('/main', { replace: true });
+      }, 500);
+      
     } catch (error) {
-      console.error("사용자 정보 업데이트 실패:", error);
+      console.error('사용자 정보 업데이트 실패:', error);
+      
+      // 구체적인 에러 메시지 제공
+      if (error.code === 'permission-denied') {
+        message.error('권한이 없습니다. 다시 로그인해주세요.');
+      } else if (error.code === 'unavailable') {
+        message.error('네트워크 연결을 확인해주세요.');
+      } else {
+        message.error('설정 저장에 실패했습니다. 다시 시도해주세요.');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -143,17 +170,28 @@ const Intro = () => {
               type="primary"
               htmlType="submit"
               block // 버튼 너비를 100%로 설정
+              loading={loading}
+              disabled={loading}
               style={{ 
                 height: '50px', 
                 borderRadius: '8px', 
-                backgroundColor: '#5FDD9D', // FoodList의 메인 컬러 사용
-                borderColor: '#5FDD9D',
-                boxShadow: '0 2px 6px rgba(95, 221, 157, 0.4)'
+                backgroundColor: loading ? '#d9d9d9' : '#5FDD9D', // FoodList의 메인 컬러 사용
+                borderColor: loading ? '#d9d9d9' : '#5FDD9D',
+                boxShadow: loading ? 'none' : '0 2px 6px rgba(95, 221, 157, 0.4)'
               }}
             >
-              <span style={{ fontFamily: 'Pretendard-700', fontSize: '16px', letterSpacing: '1px' }}>
-                설정 완료
-              </span>
+              {loading ? (
+                <>
+                  <Spin size="small" style={{ marginRight: '8px' }} />
+                  <span style={{ fontFamily: 'Pretendard-500', fontSize: '16px' }}>
+                    설정 저장 중...
+                  </span>
+                </>
+              ) : (
+                <span style={{ fontFamily: 'Pretendard-700', fontSize: '16px', letterSpacing: '1px' }}>
+                  설정 완료
+                </span>
+              )}
             </Button>
           </Form.Item>
         </Form>
@@ -162,4 +200,4 @@ const Intro = () => {
   );
 };
 
-export default Intro; 
+export default Intro;

@@ -15,7 +15,7 @@ const authReducer = (state = initialState, action) => {
         isAuthenticated: !!action.payload,
         user: {
           ...action.payload,
-          setupCompleted: action.payload.setupCompleted || false,
+          setupCompleted: action.payload?.setupCompleted || false,
         },
       };
     case CLEAR_AUTH_STATUS:
@@ -35,4 +35,4 @@ const authReducer = (state = initialState, action) => {
   }
 };
 
-export default authReducer; 
+export default authReducer;

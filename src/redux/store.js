@@ -15,7 +15,11 @@ const store = configureStore({
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: {
-        ignoredActions: ['persist/PERSIST', 'persist/REHYDRATE', 'persist/REGISTER'], // 직렬화 오류 방지
+        ignoredActions: [
+          'persist/PERSIST', 
+          'persist/REHYDRATE', 
+          'persist/REGISTER'
+        ] // 직렬화 오류 방지
       },
     }),
 });

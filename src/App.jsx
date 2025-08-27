@@ -78,18 +78,28 @@ const ConditionalHeaderFooter = () => {
   const navigate = useNavigate();
   const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
   const user = useSelector((state) => state.auth.user);
+  const [isNavigating, setIsNavigating] = React.useState(false);
 
   React.useEffect(() => {
-    if (isAuthenticated) {
-      if (!user?.setupCompleted && location.pathname !== '/intro') {
-        navigate('/intro');
-      } else if (user?.setupCompleted && location.pathname === '/intro') {
-        navigate('/main');
+    // 이미 네비게이션 중이면 중복 실행 방지
+    if (isNavigating) return;
+
+    if (isAuthenticated && user) {
+      if (!user.setupCompleted && location.pathname !== '/intro') {
+        setIsNavigating(true);
+        navigate('/intro', { replace: true });
+        setTimeout(() => setIsNavigating(false), 100);
+      } else if (user.setupCompleted && location.pathname === '/intro') {
+        setIsNavigating(true);
+        navigate('/main', { replace: true });
+        setTimeout(() => setIsNavigating(false), 100);
       }
-    } else if (location.pathname !== '/googlelogin') {
-      navigate('/googlelogin');
+    } else if (!isAuthenticated && location.pathname !== '/googlelogin') {
+      setIsNavigating(true);
+      navigate('/googlelogin', { replace: true });
+      setTimeout(() => setIsNavigating(false), 100);
     }
-  }, [isAuthenticated, user?.setupCompleted, location.pathname, navigate]);
+  }, [isAuthenticated, user?.setupCompleted, user?.uid, location.pathname, navigate, isNavigating]);
 
   const hiddenRoutes = ['/googlelogin', '/intro'];
   const shouldHideHeaderFooter = hiddenRoutes.includes(location.pathname);
@@ -131,7 +141,6 @@ const App = () => {
     // 알림 권한이 있을 때만 포그라운드 핸들러 설정
     if (Notification.permission === 'granted') {
       setupForegroundHandler();
-      // console.log('[App.jsx] 포그라운드 메시지 핸들러 설정 완료');
     }
   }, []);
 
@@ -158,13 +167,10 @@ const App = () => {
 
   // 알림 권한 요청 버튼 클릭 핸들러
   const handleNotificationRequest = () => {
-    // console.log('[App.jsx] 알림받기 버튼 클릭됨');
-    // console.log('[App.jsx] requestPermission 함수 타입:', typeof requestPermission);
-    
     if (typeof requestPermission === 'function') {
       requestPermission();
     } else {
-      console.error('[App.jsx] requestPermission이 함수가 아닙니다:', requestPermission);
+      console.error('requestPermission이 함수가 아닙니다:', requestPermission);
     }
   };
 
