@@ -49,8 +49,9 @@ const calculateCalorieOffset = (estimatedCalories, actualCalories, groupSettings
         const adjustedMultiplier = 1 + deviationMultiplier;
         offset = (-difference * adjustedMultiplier) + defaultDeviation;
       } else {
-        // 적게 먹을 시: 차이값 * multiplier + defaultDeviation
-        offset = (difference * deviationMultiplier) + defaultDeviation;
+        // 적게 먹을 시: 차이값 * (1 + multiplier) + defaultDeviation
+        const adjustedMultiplier = 1 + deviationMultiplier;
+        offset = (difference * adjustedMultiplier) + defaultDeviation;
       }
     } else {
       // 그룹 설정이 없으면 기본 차이값만 사용
