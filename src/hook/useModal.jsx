@@ -245,7 +245,13 @@ export const useModal = (foodData, testMode = false) => {
       
       const notViewed = !viewedMeals[allowedMealType];
       
-      if (hasData && notViewed) {
+      // 저녁 식사는 다음 날 아침에만 조회 가능하도록 제한
+      if (allowedMealType === 'dinner') {
+        // 저녁 식사는 다음 날 아침(6시-10시)에만 조회 가능
+        if (hasData && notViewed && hours >= 6 && hours <= 10) {
+          return { available: true, mealType: allowedMealType };
+        }
+      } else if (hasData && notViewed) {
         return { available: true, mealType: allowedMealType };
       }
     }
@@ -269,8 +275,9 @@ export const useModal = (foodData, testMode = false) => {
         canViewThisMeal = true; // 아침식사는 11시 이후부터 조회 가능
       } else if (mealType === 'lunch' && hours >= 17) {
         canViewThisMeal = true; // 점심식사는 17시 이후부터 조회 가능
-      } else if (mealType === 'dinner' && hours >= 6) {
-        canViewThisMeal = true; // 저녁식사는 다음날 6시 이후부터 조회 가능
+      } else if (mealType === 'dinner' && hours >= 6 && hours <= 10) {
+        // 저녁식사는 다음날 아침 6시부터 10시까지만 조회 가능
+        canViewThisMeal = true;
       }
       
       if (hasData && notViewed && canViewThisMeal) {
