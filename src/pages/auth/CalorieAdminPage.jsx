@@ -1067,24 +1067,133 @@ const CalorieAdminPage = () => {
     }
   ];
 
-  // 칼로리 편차 적용 함수 (선택된 날짜/식사 유형 타겟) - 새로운 훅 사용
+  // 칼로리 편차 적용 함수 (선택된 날짜/식사 유형 타겟) - 사용자 데이터 구조 유지
   const handleApplyUserDeviation = async (userId) => {
     if (!selectedDate || !selectedMealType) {
         message.error('편차를 적용할 날짜와 식사 유형을 선택하세요.');
         return;
     }
     try {
-      setLoadingUsers(true); // 사용자 데이터 관련 로딩 표시
+      setLoadingUsers(true);
       const userInfo = users.find(u => u.key === userId);
-      if (!userInfo) { message.error("사용자 없음"); return; }
+      if (!userInfo) { 
+        message.error("사용자 정보를 찾을 수 없습니다."); 
+        return; 
+      }
       
-      const userCalorieDeviation = userInfo.calorieBias; // 기존 필드명 유지 (추후 변경 예정)
       const dateString = selectedDate.format('YYYY-MM-DD');
+      const personalBias = userInfo.calorieBias || 0;
       
-      // 새로운 훅의 applyDeviation 함수 사용
-      await applyDeviation(userId, dateString, selectedMealType, userCalorieDeviation);
+      // 사용자의 해당 날짜 음식 문서 가져오기
+      const foodDocRef = doc(db, `users/${userId}/foods`, dateString);
+      const foodDocSnap = await getDoc(foodDocRef);
       
-      message.success(`${userInfo.name || userInfo.email}의 ${dateString} ${selectedMealType} 편차(appliedDeviation: ${userCalorieDeviation}) 적용 완료`);
+      if (!foodDocSnap.exists()) {
+        message.warning('해당 날짜에 식사 기록이 없습니다.');
+        return;
+      }
+      
+      const foodData = foodDocSnap.data();
+      const mealData = foodData[selectedMealType];
+      
+      if (!mealData) {
+        message.warning('해당 식사 시간대에 기록이 없습니다.');
+        return;
+      }
+      
+      // 기존 데이터 구조 확인 및 처리
+      let estimatedCalories = null;
+      let actualCalories = null;
+      
+      // 새로운 구조 (originalCalories) 우선 확인
+      if (mealData.originalCalories) {
+        estimatedCalories = mealData.originalCalories.estimated;
+        actualCalories = mealData.originalCalories.actual;
+      }
+      // 기존 구조 (estimatedCalories, actualCalories) 확인
+      else if (mealData.estimatedCalories !== undefined && mealData.actualCalories !== undefined) {
+        estimatedCalories = mealData.estimatedCalories;
+        actualCalories = mealData.actualCalories;
+      }
+      
+      if (estimatedCalories === null || actualCalories === null) {
+        message.warning('칼로리 정보가 완전하지 않습니다.');
+        return;
+      }
+      
+      // 사용자의 그룹 설정 가져오기
+      const userGroupId = userInfo.group;
+      let groupSettings = null;
+      let groupDeviationConfig = null;
+      
+      if (userGroupId !== DEFAULT_GROUP_VALUE) {
+        const userGroup = groups.find(g => g.name === userGroupId);
+        if (userGroup) {
+          groupSettings = {
+            applicableDate: new Date(),
+            defaultDeviation: userGroup.defaultDeviation || 0,
+            deviationMultiplier: userGroup.deviationMultiplier || 0.2,
+            groupId: userGroup.id
+          };
+          
+          groupDeviationConfig = {
+            appliedAt: new Date().toISOString(),
+            appliedBy: "admin",
+            defaultDeviation: userGroup.defaultDeviation || 0,
+            deviationMultiplier: userGroup.deviationMultiplier || 0.2,
+            groupId: userGroup.id
+          };
+        }
+      }
+      
+      // 편차 계산 (기존 데이터 구조 유지)
+      let appliedDeviation = personalBias;
+      
+      if (estimatedCalories && actualCalories) {
+        let difference = actualCalories - estimatedCalories;
+        
+        // 그룹 설정이 있는 경우 그룹 편차 계산 적용
+        if (groupSettings) {
+          const { deviationMultiplier = 0.2, defaultDeviation = 0 } = groupSettings;
+          
+          if (difference > 0) {
+            // 과식 시: -차이값 * (1 + multiplier)
+            const adjustedMultiplier = 1 + deviationMultiplier;
+            appliedDeviation = (-difference * adjustedMultiplier) + defaultDeviation + personalBias;
+          } else {
+            // 적게 먹을 시: 차이값 * (1 + multiplier) + defaultDeviation
+            const adjustedMultiplier = 1 + deviationMultiplier;
+            appliedDeviation = (difference * adjustedMultiplier) + defaultDeviation + personalBias;
+          }
+        } else {
+          // 그룹 설정이 없으면 기본 차이값 + 개인 편차
+          appliedDeviation = difference + personalBias;
+        }
+      }
+      
+      appliedDeviation = Math.round(appliedDeviation);
+      
+      // 기존 데이터 구조 유지하면서 업데이트
+      const updatedMealData = {
+        ...mealData,
+        calorieDeviation: {
+          ...mealData.calorieDeviation,
+          applied: appliedDeviation,
+          natural: actualCalories - estimatedCalories,
+          groupSettings: groupSettings,
+          personalBias: personalBias
+        },
+        groupDeviationConfig: groupDeviationConfig,
+        updatedAt: new Date().toISOString()
+      };
+      
+      // Firestore 업데이트
+      await updateDoc(foodDocRef, {
+        [selectedMealType]: updatedMealData,
+        updatedAt: new Date().toISOString()
+      });
+      
+      message.success(`${userInfo.name || userInfo.email}의 ${dateString} ${mealTypeKoreanMap[selectedMealType]} 편차 적용 완료 (${appliedDeviation > 0 ? '+' : ''}${appliedDeviation} kcal)`);
       await loadData(); // 데이터 리로드
 
     } catch (error) {
@@ -1126,23 +1235,135 @@ const CalorieAdminPage = () => {
         return; 
       }
       
-      const userIds = targetUsers.map(user => user.key);
+      // 그룹 설정 가져오기
+       let groupSettings = null;
+       let groupDeviationConfig = null;
+       if (groupKeyOrId !== DEFAULT_GROUP_VALUE) {
+         const targetGroup = groups.find(g => g.name === groupKeyOrId);
+         if (targetGroup) {
+           groupSettings = {
+             applicableDate: new Date(),
+             defaultDeviation: targetGroup.defaultDeviation || 0,
+             deviationMultiplier: targetGroup.deviationMultiplier || 0.2,
+             groupId: targetGroup.id
+           };
+           
+           groupDeviationConfig = {
+             appliedAt: new Date().toISOString(),
+             appliedBy: "admin",
+             defaultDeviation: targetGroup.defaultDeviation || 0,
+             deviationMultiplier: targetGroup.deviationMultiplier || 0.2,
+             groupId: targetGroup.id
+           };
+         }
+       }
       
-      // 그룹 ID 결정
-      const effectiveGroupId = groupKeyOrId === DEFAULT_GROUP_VALUE ? DEFAULT_GROUP_ID : 
-         groups.find(g => g.name === groupKeyOrId)?.id;
+      let successCount = 0;
+      let errorCount = 0;
       
-      // 새로운 훅의 applyGroupDeviation 함수 사용 (자동 계산 모드로 그룹 ID 포함)
-      const result = await applyGroupDeviation(userIds, dateString, selectedMealType, null, true, effectiveGroupId);
-      
-      if (!result.success) {
-        throw new Error(result.error || '그룹 편차 적용에 실패했습니다.');
+      // 각 사용자에 대해 편차 적용
+      for (const user of targetUsers) {
+        try {
+          const userId = user.key;
+          const personalBias = user.calorieBias || 0;
+          
+          // 사용자의 해당 날짜 음식 문서 가져오기
+          const foodDocRef = doc(db, `users/${userId}/foods`, dateString);
+          const foodDocSnap = await getDoc(foodDocRef);
+          
+          if (!foodDocSnap.exists()) {
+            continue; // 해당 날짜에 식사 기록이 없으면 스킵
+          }
+          
+          const foodData = foodDocSnap.data();
+          const mealData = foodData[selectedMealType];
+          
+          if (!mealData) {
+            continue; // 해당 식사 시간대에 기록이 없으면 스킵
+          }
+          
+          // 기존 데이터 구조 확인 및 처리
+          let estimatedCalories = null;
+          let actualCalories = null;
+          
+          // 새로운 구조 (originalCalories) 우선 확인
+          if (mealData.originalCalories) {
+            estimatedCalories = mealData.originalCalories.estimated;
+            actualCalories = mealData.originalCalories.actual;
+          }
+          // 기존 구조 (estimatedCalories, actualCalories) 확인
+          else if (mealData.estimatedCalories !== undefined && mealData.actualCalories !== undefined) {
+            estimatedCalories = mealData.estimatedCalories;
+            actualCalories = mealData.actualCalories;
+          }
+          
+          if (estimatedCalories === null || actualCalories === null) {
+            continue; // 칼로리 정보가 완전하지 않으면 스킵
+          }
+          
+          // 편차 계산 (기존 데이터 구조 유지)
+          let appliedDeviation = personalBias;
+          
+          if (estimatedCalories && actualCalories) {
+            let difference = actualCalories - estimatedCalories;
+            
+            // 그룹 설정이 있는 경우 그룹 편차 계산 적용
+            if (groupSettings) {
+              const { deviationMultiplier = 0.2, defaultDeviation = 0 } = groupSettings;
+              
+              if (difference > 0) {
+                // 과식 시: -차이값 * (1 + multiplier)
+                const adjustedMultiplier = 1 + deviationMultiplier;
+                appliedDeviation = (-difference * adjustedMultiplier) + defaultDeviation + personalBias;
+              } else {
+                // 적게 먹을 시: 차이값 * (1 + multiplier) + defaultDeviation
+                const adjustedMultiplier = 1 + deviationMultiplier;
+                appliedDeviation = (difference * adjustedMultiplier) + defaultDeviation + personalBias;
+              }
+            } else {
+              // 그룹 설정이 없으면 기본 차이값 + 개인 편차
+              appliedDeviation = difference + personalBias;
+            }
+          }
+          
+          appliedDeviation = Math.round(appliedDeviation);
+          
+          // 기존 데이터 구조 유지하면서 업데이트
+           const updatedMealData = {
+             ...mealData,
+             calorieDeviation: {
+               ...mealData.calorieDeviation,
+               applied: appliedDeviation,
+               natural: actualCalories - estimatedCalories,
+               groupSettings: groupSettings,
+               personalBias: personalBias
+             },
+             groupDeviationConfig: groupDeviationConfig,
+             updatedAt: new Date().toISOString()
+           };
+          
+          // Firestore 업데이트
+          await updateDoc(foodDocRef, {
+            [selectedMealType]: updatedMealData,
+            updatedAt: new Date().toISOString()
+          });
+          
+          successCount++;
+        } catch (userError) {
+          console.error(`사용자 ${user.name || user.email} 편차 적용 실패:`, userError);
+          errorCount++;
+        }
       }
       
       const groupName = groupKeyOrId === DEFAULT_GROUP_VALUE ? '기본 그룹' : 
          (groups.find(g => g.name === groupKeyOrId)?.name || groupKeyOrId);
       
-      message.success(`${groupName}의 ${dateString} ${selectedMealType} 편차 적용 완료 (${targetUsers.length}명)`);
+      if (successCount > 0) {
+        message.success(`${groupName}의 ${dateString} ${mealTypeKoreanMap[selectedMealType]} 편차 적용 완료 (${successCount}명 성공${errorCount > 0 ? `, ${errorCount}명 실패` : ''})`);
+      } else {
+        message.warning('편차를 적용할 수 있는 사용자가 없습니다.');
+      }
+      
       await loadData(); // 데이터 리로드
 
     } catch (error) {
