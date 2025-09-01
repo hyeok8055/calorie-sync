@@ -1,7 +1,6 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getAnalytics } from "firebase/analytics";
 import { getFirestore } from "firebase/firestore";
 import { getDatabase } from "firebase/database";
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
@@ -28,13 +27,10 @@ const messaging = getMessaging(app);
 // 포그라운드 메시지 핸들러 설정 함수
 export const setupForegroundHandler = () => {
   onMessage(messaging, (payload) => {
-    // console.log('[firebaseconfig.js] 포그라운드 메시지 수신:', payload);
-    
+    console.log('[firebaseconfig.js] 포그라운드 메시지 수신:', payload);
     // 핵심: data-only 메시지만 처리하여 중복 방지
     if (payload.data && !payload.notification) {
       showForegroundNotification(payload.data);
-    } else {
-      // console.log('[firebaseconfig.js] notification 객체 포함 메시지 무시');
     }
   });
 };

@@ -22,19 +22,20 @@ self.firebaseMessaging = null;
 function initializeFirebaseMessaging() {
   if (!self.firebase) {
     // Firebase 앱과 메시징 관련 스크립트 로드
-    importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js");
-    importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js");
+    importScripts("https://www.gstatic.com/firebasejs/12.2.0/firebase-app-compat.js");
+    importScripts("https://www.gstatic.com/firebasejs/12.2.0/firebase-messaging-compat.js");
 
-    // Firebase 구성 값 (Vite 빌드 시점에 환경변수가 안전하게 주입됨)
+    // Firebase 구성 값 (개발/프로덕션 환경 대응)
+    // 개발 모드에서는 import.meta.env를 사용할 수 없으므로 전역 변수나 하드코딩 사용
     const firebaseConfig = {
-      apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-      databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
-      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-      messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-      appId: import.meta.env.VITE_FIREBASE_APP_ID,
-      measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+      apiKey: self.VITE_FIREBASE_API_KEY,
+      authDomain: self.VITE_FIREBASE_AUTH_DOMAIN,
+      databaseURL: self.VITE_FIREBASE_DATABASE_URL,
+      projectId: self.VITE_FIREBASE_PROJECT_ID,
+      storageBucket: self.VITE_FIREBASE_STORAGE_BUCKET,
+      messagingSenderId: self.VITE_FIREBASE_MESSAGING_SENDER_ID,
+      appId: self.VITE_FIREBASE_APP_ID,
+      measurementId: self.VITE_FIREBASE_MEASUREMENT_ID
     };
 
     // Firebase 초기화
@@ -79,8 +80,6 @@ messaging.onBackgroundMessage(function(payload) {
     return self.registration.showNotification(title || '새 알림', notificationOptions);
   }
   
-  // notification 객체가 포함된 메시지는 무시 (FCM 자동 처리 방지)
-  // console.log('[firebase-messaging-sw.js] notification 객체 포함 메시지 무시');
   return null;
 });
 

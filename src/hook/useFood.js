@@ -5,19 +5,20 @@ import { getDatabase, ref, get, orderByChild, equalTo, query as rtdbQuery, limit
 import { useSelector, useDispatch } from 'react-redux';
 import { updateMealFlag } from '@/redux/actions/mealActions';
 import useCalorieDeviation from './useCalorieDeviation';
+import dayjs from 'dayjs';
 
 const getTodayDate = () => {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return dayjs().format('YYYY-MM-DD');
+};
+
+// 어제 날짜 가져오기 함수 추가
+const getYesterdayDate = () => {
+  return dayjs().subtract(1, 'day').format('YYYY-MM-DD');
 };
 
 // 시간대 기준으로 간식이 어느 식사에 포함되는지 결정
 const getSnackMealType = () => {
-  const now = new Date();
-  const hours = now.getHours();
+  const hours = dayjs().hour();
   
   if (hours >= 0 && hours < 12) {
     return 'breakfast';
@@ -27,8 +28,6 @@ const getSnackMealType = () => {
     return 'dinner';
   }
 };
-
-
 
 // 새로운 편차 계산 함수 (요구사항에 맞는 로직)
 const calculateCalorieOffset = (estimatedCalories, actualCalories, groupSettings, personalBias = 0) => {
@@ -63,16 +62,6 @@ const calculateCalorieOffset = (estimatedCalories, actualCalories, groupSettings
   offset += personalBias;
   
   return Math.round(offset);
-};
-
-// 어제 날짜 가져오기 함수 추가
-const getYesterdayDate = () => {
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const year = yesterday.getFullYear();
-  const month = String(yesterday.getMonth() + 1).padStart(2, '0');
-  const day = String(yesterday.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 };
 
 export const useFood = () => {
@@ -703,8 +692,6 @@ export const useFood = () => {
 
       // 배치 커밋
       await batch.commit();
-
-
 
       return {
         success: true,

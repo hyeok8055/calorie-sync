@@ -84,26 +84,6 @@ const SurveyPage = () => {
     calculateLunchDifference();
   }, [foodData, calculateCalorieOffset, getUserGroupId, getGroupDeviationSettings, getPersonalCalorieBias, uid]);
 
-  // 시간 제한 상태 확인
-  const [timeRestricted, setTimeRestricted] = useState(false);
-  
-  // 시간 제한 확인 (매일 밤 9시부터 기록 가능)
-  useEffect(() => {
-    const now = new Date();
-    const currentHour = now.getHours();
-    
-    // // 오후 9시(21시) 이전에는 접근 불가
-    // if (currentHour < 21) {
-    //   setTimeRestricted(true);
-    //   Toast.show({
-    //     content: '설문조사는 매일 밤 9시부터 작성 가능합니다.',
-    //     position: 'top',
-    //     duration: 3000
-    //   });
-    //   setTimeout(() => navigate('/'), 3000);
-    // }
-  }, [navigate]);
-
   // 오늘 설문 제출 여부 확인
   useEffect(() => {
     const checkTodaySubmission = async () => {
@@ -289,18 +269,6 @@ const SurveyPage = () => {
     );
   }
 
-  if (timeRestricted) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center">
-        <div className="text-center p-6">
-          <div className="text-2xl mb-4">🕘</div>
-          <div className="text-lg font-semibold text-gray-700 mb-2">설문조사 시간이 아닙니다</div>
-          <div className="text-sm text-gray-500">매일 밤 9시부터 작성 가능합니다</div>
-        </div>
-      </div>
-    );
-  }
-
   if (alreadySubmitted) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center">
@@ -321,17 +289,6 @@ const SurveyPage = () => {
       >
         <div className="flex flex-col items-center">
           <span className="text-lg font-bold text-gray-800">📊 설문조사</span>
-          {/* <div className="w-full max-w-xs mt-2">
-            <div className="w-full bg-gray-200 rounded-full h-1.5">
-              <div 
-                className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
-                style={{ width: `${progressPercentage}%` }}
-              ></div>
-            </div>
-            <div className="text-xs text-gray-500 mt-1 text-center">
-              {currentStep} / {totalSteps}
-            </div>
-          </div> */}
         </div>
       </NavBar>
 

@@ -241,11 +241,28 @@ const SidePopUp = ({ visible, onClose, onLogout, userName, email }) => {
                   color={surveyStatus.isActive ? 'danger' : 'warning'}
                   onClick={handleSurveyToggle}
                   loading={surveyLoading}
+                  style={{ marginBottom: '12px' }}
                 >
                   <Space align='center'>
                     <span style={{ fontFamily: 'Pretendard-600' }}>
                       {surveyStatus.isActive ? '설문조사 종료' : '설문조사 실행'}
                     </span>
+                  </Space>
+                </Button>
+              )}
+              {isAdmin && (
+                <Button 
+                  block 
+                  fill='outline' 
+                  shape='rounded' 
+                  color='primary'
+                  onClick={() => {
+                    navigate('/admin/data-export');
+                    onClose();
+                  }}
+                >
+                  <Space align='center'>
+                    <span style={{ fontFamily: 'Pretendard-600' }}>데이터 내보내기</span>
                   </Space>
                 </Button>
               )}
