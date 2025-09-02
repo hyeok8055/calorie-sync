@@ -5,89 +5,39 @@ import { useSelector } from 'react-redux';
 import { db } from '../firebaseconfig';
 import { collection, addDoc, serverTimestamp, query, where, getDocs, setDoc, doc, getDoc } from 'firebase/firestore';
 import { useFood } from '../hook/useFood';
-import useCalorieDeviation from '../hook/useCalorieDeviation';
 
 const SurveyPage = () => {
   const navigate = useNavigate();
-  const uid = useSelector((state) => state.auth.user?.uid);
+  const email = useSelector((state) => state.auth.user?.email);
   const user = useSelector((state) => state.auth.user);
   const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
-  const { foodData, calculateCalorieOffset } = useFood();
-  const { getGroupDeviationSettings, getPersonalCalorieBias, getUserGroupId } = useCalorieDeviation();
+  const { foodData } = useFood();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
-  const [q6Answer, setQ6Answer] = useState(null);
   const [q6ScaleValue, setQ6ScaleValue] = useState(null);
   const [q6SimpleValue, setQ6SimpleValue] = useState(null);
   const [showQ6Follow, setShowQ6Follow] = useState(false);
-  const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 6;
   const [lunchCalorieDifference, setLunchCalorieDifference] = useState(null);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [checkingSubmission, setCheckingSubmission] = useState(true);
 
-  // 점심 칼로리 편차 계산
+  // 점심 칼로리 편차 확인 - applied 값이 음수일 때만 6번 문항 표시
   useEffect(() => {
-    const calculateLunchDifference = async () => {
-      if (foodData && foodData.lunch) {
-        const lunch = foodData.lunch;
-        console.log(lunch)
-        if (lunch.actualCalories !== null && lunch.actualCalories !== undefined && 
-            lunch.estimatedCalories !== null && lunch.estimatedCalories !== undefined) {
-          try {
-            // 그룹 설정과 개인 편향값 가져오기
-            const groupId = await getUserGroupId(uid);
-            const groupSettings = await getGroupDeviationSettings(groupId);
-            const personalBias = await getPersonalCalorieBias(uid);
-            
-            // 그룹편차 적용 여부 확인
-            const hasGroupDeviation = groupSettings && (
-              groupSettings.multiplier !== 1 || 
-              groupSettings.defaultDeviation !== 0
-            );
-            
-            if (hasGroupDeviation) {
-              // 그룹편차가 적용된 사용자의 경우
-              // 부호 전환으로 인해 값이 무조건 음수로 고정되므로 항상 6번 문항 입력 대상
-              const offset = calculateCalorieOffset(
-                lunch.estimatedCalories, 
-                lunch.actualCalories, 
-                groupSettings, 
-                personalBias
-              );
-              const difference = -offset; // 부호 반전
-              console.log('Calorie difference (group deviation applied):', difference);
-              
-              // 그룹편차 적용 사용자는 항상 6번 문항 대상 (양수 값으로 설정)
-              setLunchCalorieDifference(Math.abs(difference) || 1);
-            } else {
-              // 일반 사용자의 경우
-              // 실제 섭취 칼로리 - 예측 칼로리로 직접 비교
-              const rawDifference = lunch.estimatedCalories - lunch.actualCalories;
-              console.log('Calorie difference (normal user):', rawDifference);
-              
-              // 예상보다 적게 섭취한 경우(rawDifference > 0)만 6번 문항 입력 대상
-              if (rawDifference > 0) {
-                setLunchCalorieDifference(Math.round(rawDifference));
-              } else {
-                setLunchCalorieDifference(0);
-              }
-            }
-          } catch (error) {
-            console.error('편차 계산 중 오류:', error);
-            setLunchCalorieDifference(0);
-          }
-        }
+    if (foodData && foodData.lunch && foodData.lunch.calorieDeviation && foodData.lunch.calorieDeviation.applied) {
+      if (foodData.lunch.calorieDeviation.applied < 0) {
+        setLunchCalorieDifference(Math.abs(foodData.lunch.calorieDeviation.applied));
+      } else {
+        setLunchCalorieDifference(0);
       }
-    };
-    
-    calculateLunchDifference();
-  }, [foodData, calculateCalorieOffset, getUserGroupId, getGroupDeviationSettings, getPersonalCalorieBias, uid]);
+    } else {
+      setLunchCalorieDifference(0);
+    }
+  }, [foodData]);
 
   // 오늘 설문 제출 여부 확인
   useEffect(() => {
     const checkTodaySubmission = async () => {
-      if (!uid) {
+      if (!email) {
         setCheckingSubmission(false);
         return;
       }
@@ -101,8 +51,8 @@ const SurveyPage = () => {
           surveyId = surveyDoc.data().surveyId;
         }
 
-        // 해당 설문조사에 대한 사용자 응답 확인: surveys/{surveyId}/{userId}
-        const userResponseDoc = await getDoc(doc(db, 'surveys', surveyId, 'responses', uid));
+        // 해당 설문조사에 대한 사용자 응답 확인: surveys/{surveyId}/{email}
+        const userResponseDoc = await getDoc(doc(db, 'surveys', surveyId, 'responses', email));
         
         if (userResponseDoc.exists()) {
           const responseData = userResponseDoc.data();
@@ -127,45 +77,40 @@ const SurveyPage = () => {
       }
     };
 
-    if (isAuthenticated && uid) {
+    if (isAuthenticated && email) {
       checkTodaySubmission();
     }
-  }, [uid, isAuthenticated, navigate]);
-
-  // 인증되지 않은 사용자 리다이렉트
-  useEffect(() => {
-    if (!isAuthenticated || !uid) {
-      Toast.show({
-        content: '로그인이 필요합니다.',
-        position: 'top'
-      });
-      navigate('/');
-    }
-  }, [isAuthenticated, uid, navigate]);
+  }, [email, isAuthenticated, navigate]);
 
   // Q6 답변 변경 시 추가 질문 표시 여부 결정
   const handleQ6Change = (value, type) => {
+    
     if (type === 'scale') {
-      // 척도를 선택했으므로 간단 선택 해제
       setQ6ScaleValue(value);
       setQ6SimpleValue(null);
-      setQ6Answer(value);
+      // Form에 값 설정
       form.setFieldsValue({ q6_less_intake_reaction: value });
     } else if (type === 'simple') {
-      // 간단 선택을 했으므로 척도 선택 해제
       setQ6SimpleValue(value);
       setQ6ScaleValue(null);
-      setQ6Answer(value);
+      // Form에 값 설정
       form.setFieldsValue({ q6_less_intake_reaction: value });
     }
     
-    // 추가 질문 표시 여부 결정 (7점 척도에 맞게 조정)
+    // 추가 질문 표시 여부: 척도 3점 이하 또는 '아니오' 선택 시
     setShowQ6Follow(value === 'no' || (typeof value === 'number' && value <= 3));
+    
+    // Form 검증 트리거
+    form.validateFields(['q6_less_intake_reaction']);
   };
+
+  // Q6 상태 변경 시 강제 리렌더링
+  useEffect(() => {
+  }, [q6ScaleValue, q6SimpleValue]);
 
   // 설문 제출 처리
   const handleSubmit = async (values) => {
-    if (!uid || !user) {
+    if (!email || !user) {
       Toast.show({
         content: '로그인이 필요합니다.',
         position: 'top'
@@ -184,8 +129,7 @@ const SurveyPage = () => {
       }
 
       const surveyData = {
-        userId: uid,
-        userEmail: user.email,
+        userEmail: email,
         q1_daily_calories: values.q1_daily_calories,
         q2_on_diet: values.q2_on_diet,
         q3_weight_control_motivation: values.q3_weight_control_motivation,
@@ -197,8 +141,8 @@ const SurveyPage = () => {
         timestamp: new Date().toISOString()
       };
 
-      // 올바른 구조로 저장: surveys/{surveyId}/responses/{userId}
-      await setDoc(doc(db, 'surveys', surveyId, 'responses', uid), surveyData);
+      // 올바른 구조로 저장: surveys/{surveyId}/responses/{email}
+      await setDoc(doc(db, 'surveys', surveyId, 'responses', email), surveyData);
       
       Toast.show({
         content: '설문조사가 성공적으로 제출되었습니다!',
@@ -248,7 +192,6 @@ const SurveyPage = () => {
                 >
                   {scaleValue}
                 </button>
-                {/* <span className="text-xs text-gray-400 mt-1">{scaleValue}</span> */}
               </div>
             );
           })}
@@ -332,7 +275,6 @@ const SurveyPage = () => {
                     type="number"
                     placeholder="예: 2000"
                     className="text-base sm:text-lg py-3 px-4 rounded-lg border-2 border-gray-200 focus:border-blue-400 transition-colors"
-                    onFocus={() => setCurrentStep(1)}
                   />
                   <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 font-medium text-sm sm:text-base">
                     kcal
@@ -360,7 +302,7 @@ const SurveyPage = () => {
                 name="q2_on_diet"
                 rules={[{ required: true, message: '선택해 주세요' }]}
               >
-                <Radio.Group className="w-full" onChange={() => setCurrentStep(2)}>
+                <Radio.Group className="w-full">
                   <div className="grid grid-cols-2 gap-3">
                     <label className="flex items-center p-3 sm:p-2 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 transition-colors">
                       <Radio value="yes" className="mr-3" />
@@ -398,7 +340,6 @@ const SurveyPage = () => {
                   value={form.getFieldValue('q3_weight_control_motivation')}
                   onChange={(value) => {
                     form.setFieldsValue({ q3_weight_control_motivation: value });
-                    setCurrentStep(3);
                   }}
                   options={[
                     '전혀 없음',
@@ -433,7 +374,7 @@ const SurveyPage = () => {
                 name="q4_forbidden_food_behavior"
                 rules={[{ required: true, message: '선택해 주세요' }]}
               >
-                <Radio.Group className="w-full" onChange={() => setCurrentStep(4)}>
+                <Radio.Group className="w-full">
                   <div className="space-y-3">
                     <label className="flex items-start p-3 sm:p-2 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 transition-colors">
                       <Radio value={1} className="mt-1 mr-3" />
@@ -487,7 +428,6 @@ const SurveyPage = () => {
                   value={form.getFieldValue('q5_food_consciousness')}
                   onChange={(value) => {
                     form.setFieldsValue({ q5_food_consciousness: value });
-                    setCurrentStep(5);
                   }}
                   options={[
                     '전혀 의식하지 않음',
@@ -517,65 +457,72 @@ const SurveyPage = () => {
                 </h3>
               </div>
               <p className="text-sm sm:text-base text-gray-600 mb-6 pl-4">
-                오늘 점심에 예상보다 <span className="font-bold text-md text-blue-600 bg-blue-50 px-2 py-1 rounded-md">{lunchCalorieDifference || 0}</span> 칼로리를<br/> 적게 섭취하였습니다.
+                오늘 점심에 예상보다 <span className="font-bold text-md text-blue-600 bg-blue-50 px-2 py-1 rounded-md">{lunchCalorieDifference}</span> 칼로리를<br/> 적게 섭취하였습니다.
                 <br/>이 사실이 얼마나 놀라웠나요?
               </p>
-              <Form.Item
-                name="q6_less_intake_reaction"
-                rules={lunchCalorieDifference > 0 ? [{ required: true, message: '선택해 주세요' }] : []}
-              >
-                <div className="space-y-6">
-                  {/* 7점 척도 */}
-                  <div>
-                    <div className="bg-gray-50 p-3 sm:p-2 rounded-lg">
-                      <LikertScale
-                        key={`likert-${q6ScaleValue || 'none'}`}
-                        value={q6ScaleValue}
-                        onChange={(value) => {
-                          handleQ6Change(value, 'scale');
-                          setCurrentStep(6);
-                        }}
-                        options={[
-                          '전혀 놀랍지 않음',
-                          '2',
-                          '3',
-                          '4',
-                          '5',
-                          '6',
-                          '많이 놀라움'
-                        ]}
-                        name="q6_scale"
-                      />
-                    </div>
-                  </div>
-                  
-                  {/* 또는 예/아니오 */}
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-700 mb-3">
-                      또는 간단히 선택해주세요
-                    </h4>
-                    <Radio.Group 
-                      key={`radio-${q6SimpleValue || 'none'}`}
-                      value={q6SimpleValue}
-                      onChange={(e) => {
-                        handleQ6Change(e.target.value, 'simple');
-                        setCurrentStep(6);
-                      }}
-                      className="w-full"
-                    >
-                      <div className="grid grid-cols-2 gap-3">
-                        <label className="flex items-center p-3 sm:p-2 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 transition-colors">
-                          <Radio value="yes" className="mr-3" />
-                          <span className="text-sm sm:text-base text-gray-700 font-medium">예</span>
-                        </label>
-                        <label className="flex items-center p-3 sm:p-2 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 transition-colors">
-                          <Radio value="no" className="mr-3" />
-                          <span className="text-sm sm:text-base text-gray-700 font-medium">아니오</span>
-                        </label>
-                      </div>
-                    </Radio.Group>
+              <div className="space-y-6">
+                {/* 7점 척도 */}
+                <div>
+                  <div className="bg-gray-50 p-3 sm:p-2 rounded-lg">
+                    <LikertScale
+                      key={`scale-${q6ScaleValue || 'none'}-simple-${q6SimpleValue || 'none'}`}
+                      value={q6ScaleValue}
+                      onChange={(value) => handleQ6Change(value, 'scale')}
+                      options={[
+                        '전혀 놀랍지 않음',
+                        '2',
+                        '3',
+                        '4',
+                        '5',
+                        '6',
+                        '많이 놀라움'
+                      ]}
+                      name="q6_scale"
+                    />
                   </div>
                 </div>
+                
+                {/* 또는 예/아니오 */}
+                <div>
+                  <h4 className="text-sm font-medium text-gray-700 mb-3">
+                    또는 간단히 선택해주세요
+                  </h4>
+                  <Radio.Group 
+                    key={`simple-${q6SimpleValue || 'none'}-scale-${q6ScaleValue || 'none'}`}
+                    value={q6SimpleValue}
+                    onChange={(value) => handleQ6Change(value, 'simple')}
+                    className="w-full"
+                  >
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="flex items-center p-3 sm:p-2 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 transition-colors">
+                        <Radio value="yes" className="mr-3" />
+                        <span className="text-sm sm:text-base text-gray-700 font-medium">예</span>
+                      </label>
+                      <label className="flex items-center p-3 sm:p-2 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 transition-colors">
+                        <Radio value="no" className="mr-3" />
+                        <span className="text-sm sm:text-base text-gray-700 font-medium">아니오</span>
+                      </label>
+                    </div>
+                  </Radio.Group>
+                </div>
+              </div>
+              
+              {/* 숨겨진 Form.Item으로 검증 처리 */}
+              <Form.Item
+                name="q6_less_intake_reaction"
+                rules={[
+                  {
+                    validator: () => {
+                      if (lunchCalorieDifference > 0 && !q6ScaleValue && !q6SimpleValue) {
+                        return Promise.reject(new Error('선택해 주세요'));
+                      }
+                      return Promise.resolve();
+                    }
+                  }
+                ]}
+                style={{ display: 'none' }}
+              >
+                <input type="hidden" />
               </Form.Item>
             </div>
           </Card>

@@ -1,6 +1,6 @@
 /**
  * 식사 데이터 스키마 정의
- * Firebase Firestore: users/{uid}/foods/{date}
+ * Firebase Firestore: users/{email}/foods/{date}
  * 
  * 각 날짜별로 아침, 점심, 저녁, 간식 데이터를 저장
  */
@@ -83,23 +83,7 @@ export const MealTypeSchema = {
     }
   },
   
-  // 최종 칼로리 정보 (편차 적용 후)
-  finalCalories: {
-    type: 'object',
-    required: true,
-    properties: {
-      estimated: {
-        type: 'number',
-        nullable: true,
-        description: '편차 적용된 예상 칼로리'
-      },
-      actual: {
-        type: 'number',
-        nullable: true,
-        description: '편차 적용된 실제 칼로리'
-      }
-    }
-  },
+  // 최종 칼로리는 originalCalories + calorieDeviation.applied로 계산됨 (별도 저장하지 않음)
   
   // 칼로리 편차 정보
   calorieDeviation: {
@@ -277,10 +261,6 @@ export const createDefaultMealData = (date) => {
     flag: MealFlags.INCOMPLETE,
     foods: [],
     originalCalories: {
-      estimated: null,
-      actual: null
-    },
-    finalCalories: {
       estimated: null,
       actual: null
     },

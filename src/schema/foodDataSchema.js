@@ -1,6 +1,6 @@
 /**
  * 음식 데이터 스키마 정의
- * Firebase Realtime Database: foods/{foodId}
+ * Static Data: temp_foods.json, API 기반 음식 데이터
  * 
  * 개별 음식 정보를 저장하는 스키마
  */

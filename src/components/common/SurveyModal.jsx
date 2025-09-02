@@ -8,10 +8,11 @@ import {
   CheckCircleOutline
 } from 'antd-mobile-icons';
 
-const SurveyModal = ({ visible, onClose, surveyId }) => {
+const SurveyModal = ({ visible, onClose, surveyId, email: propEmail }) => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const uid = useSelector((state) => state.auth.user?.uid);
+  const reduxEmail = useSelector((state) => state.auth.user?.email);
+  const email = propEmail || reduxEmail;
   const { checkGlobalSurveyStatus, checkUserSurveyCompletion } = useSurvey();
   const [autoModalVisible, setAutoModalVisible] = useState(false);
   const [currentSurveyId, setCurrentSurveyId] = useState(null);
@@ -19,12 +20,12 @@ const SurveyModal = ({ visible, onClose, surveyId }) => {
   // 전역 설문조사 상태 확인 및 자동 모달 표시
   useEffect(() => {
     const checkAndShowSurvey = async () => {
-      if (uid) {
+      if (email) {
         try {
           const globalStatus = await checkGlobalSurveyStatus();
           
           if (globalStatus && globalStatus.isActive) {
-            const userCompletion = await checkUserSurveyCompletion(uid, globalStatus.surveyId);
+            const userCompletion = await checkUserSurveyCompletion(email, globalStatus.surveyId);
             
             // 사용자가 아직 설문조사를 완료하지 않은 경우 자동으로 모달 표시
             if (!userCompletion) {
@@ -44,7 +45,7 @@ const SurveyModal = ({ visible, onClose, surveyId }) => {
     const interval = setInterval(checkAndShowSurvey, 30 * 1000);
     
     return () => clearInterval(interval);
-  }, [uid, checkGlobalSurveyStatus, checkUserSurveyCompletion]);
+  }, [email, checkGlobalSurveyStatus, checkUserSurveyCompletion]);
 
   const handleParticipate = () => {
     // 자동 모달인 경우

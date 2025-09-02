@@ -1,17 +1,24 @@
 /**
  * 그룹 설정 데이터 스키마 정의
- * Firebase Firestore: groups/{groupId}, groupMembers/{groupId}, groupSettings/{groupId}
+ * Firebase Firestore: calorieGroups/{groupId}, calorieGroups/{groupId}/users/{email}
  * 
  * 칼로리 그룹 관리 및 그룹별 편차 설정을 관리
  */
 
-// 그룹 기본 정보 스키마
+// 그룹 기본 정보 스키마 (calorieGroups 컬렉션)
 export const GroupSchema = {
-  // 그룹 ID
+  // 그룹 ID (Firestore 문서 ID)
   groupId: {
     type: 'string',
     required: true,
-    description: '그룹 고유 식별자'
+    description: '그룹 고유 식별자 (Firestore 문서 ID)'
+  },
+  
+  // 그룹 키 (내부 식별용)
+  key: {
+    type: 'string',
+    required: true,
+    description: '그룹 내부 키 (group_timestamp 형식)'
   },
   
   // 그룹 이름
@@ -108,17 +115,18 @@ export const GroupSchema = {
   createdBy: {
     type: 'string',
     required: true,
-    description: '그룹 생성자 사용자 ID'
+    description: '그룹 생성자 이메일'
   },
   
   // 그룹 관리자 목록
   admins: {
     type: 'array',
     items: {
-      type: 'string'
+      type: 'string',
+      format: 'email'
     },
     default: [],
-    description: '그룹 관리자 사용자 ID 목록'
+    description: '그룹 관리자 이메일 목록'
   },
   
   // 그룹 태그
@@ -182,12 +190,26 @@ export const GroupSchema = {
     }
   },
   
-  // 생성 시간
+  // 그룹 생성 시간
   createdAt: {
     type: 'string',
     format: 'iso-date',
     required: true,
     description: '그룹 생성 시간'
+  },
+  
+  // 그룹 생성 날짜 (Firestore Timestamp)
+  createdDate: {
+    type: 'object',
+    required: true,
+    description: '그룹 생성 날짜 (Firestore Timestamp)'
+  },
+  
+  // 그룹 적용 날짜 (Firestore Timestamp)
+  applicableDate: {
+    type: 'object',
+    required: true,
+    description: '그룹 편차 적용 날짜 (Firestore Timestamp)'
   },
   
   // 마지막 업데이트 시간
@@ -212,7 +234,7 @@ export const GroupMemberSchema = {
   memberId: {
     type: 'string',
     required: true,
-    description: '멤버 고유 식별자 (groupId_uid)'
+    description: '멤버 고유 식별자 (groupId_email)'
   },
   
   // 그룹 ID
@@ -222,11 +244,12 @@ export const GroupMemberSchema = {
     description: '그룹 ID'
   },
   
-  // 사용자 ID
-  uid: {
+  // 사용자 이메일
+  email: {
     type: 'string',
+    format: 'email',
     required: true,
-    description: '사용자 ID'
+    description: '사용자 이메일'
   },
   
   // 멤버 역할
@@ -615,62 +638,32 @@ export const DeviationTypes = {
   ADAPTIVE: 'adaptive'
 };
 
-// 기본 그룹 생성 함수
-export const createDefaultGroup = (name, createdBy, options = {}) => {
-  const groupId = `group_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+// 기본 그룹 생성 함수 (실제 calorieGroups 컬렉션 구조)
+export const createDefaultGroup = (name, createdBy, applicableDate, options = {}) => {
+  const timestamp = Date.now();
+  const key = `group_${timestamp}`;
   
   return {
-    groupId,
+    key,
     name,
     description: options.description || null,
-    color: options.color || '#3B82F6',
+    color: options.color || '#1677ff',
     defaultDeviation: options.defaultDeviation || 0,
-    deviationMultiplier: options.deviationMultiplier || 1.0,
-    groupType: options.groupType || GroupTypes.COMMUNITY,
-    status: GroupStatus.ACTIVE,
-    isPublic: options.isPublic || false,
-    requiresApproval: options.requiresApproval !== false,
-    maxMembers: options.maxMembers || 50,
-    currentMemberCount: 1,
+    deviationMultiplier: options.deviationMultiplier || 0.2,
+    createdDate: new Date(),
+    applicableDate: applicableDate,
     createdBy,
-    admins: [createdBy],
-    tags: options.tags || [],
-    settings: {
-      autoApplyDeviation: true,
-      allowDataSharing: false,
-      showGroupStats: true,
-      notifications: {
-        newMember: true,
-        deviationUpdate: true,
-        weeklyReport: false
-      }
-    },
     createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    lastActivityAt: new Date().toISOString()
+    updatedAt: new Date().toISOString()
   };
 };
 
-// 기본 그룹 멤버 생성 함수
-export const createDefaultGroupMember = (groupId, uid, role = MemberRoles.MEMBER) => {
+// 기본 그룹 멤버 생성 함수 (calorieGroups/{groupId}/users/{email} 구조)
+export const createDefaultGroupMember = (groupId, email, addedBy = 'admin') => {
   return {
-    memberId: `${groupId}_${uid}`,
-    groupId,
-    uid,
-    role,
-    status: role === MemberRoles.OWNER ? MemberStatus.ACTIVE : MemberStatus.PENDING,
-    nickname: null,
-    joinMessage: null,
-    personalSettings: {
-      applyGroupDeviation: true,
-      personalMultiplier: 1.0,
-      shareData: false
-    },
-    joinedAt: new Date().toISOString(),
-    approvedAt: role === MemberRoles.OWNER ? new Date().toISOString() : null,
-    approvedBy: role === MemberRoles.OWNER ? uid : null,
-    lastActiveAt: null,
-    updatedAt: new Date().toISOString()
+    email,
+    addedAt: new Date(),
+    addedBy
   };
 };
 

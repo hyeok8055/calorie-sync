@@ -16,18 +16,18 @@ import { setSurveyActive, setSurveyCompleted } from '../redux/actions/surveyActi
 
 const useSurvey = () => {
   const dispatch = useDispatch();
-  const uid = useSelector((state) => state.auth.user?.uid);
+  const email = useSelector((state) => state.auth.user?.email);
   const surveyState = useSelector((state) => state.survey);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   // 사용자의 설문조사 완료 여부 확인
-  const checkUserSurveyCompletion = useCallback(async (userId, surveyId) => {
-    if (!userId || !surveyId) return false;
+  const checkUserSurveyCompletion = useCallback(async (userEmail, surveyId) => {
+    if (!userEmail || !surveyId) return false;
     
     try {
-      // 구조: surveys/{surveyId}/responses/{userId}
-      const userResponseDoc = await getDoc(doc(db, 'surveys', surveyId, 'responses', userId));
+      // 구조: surveys/{surveyId}/responses/{userEmail}
+      const userResponseDoc = await getDoc(doc(db, 'surveys', surveyId, 'responses', userEmail));
       return userResponseDoc.exists();
     } catch (err) {
       console.error('사용자 설문조사 완료 여부 확인 오류:', err);
@@ -70,7 +70,7 @@ const useSurvey = () => {
         isActive: true,
         surveyId: surveyId,
         activatedAt: serverTimestamp(),
-        activatedBy: uid
+        activatedBy: email
       });
       
       dispatch(setSurveyActive(true, surveyId));
@@ -92,7 +92,7 @@ const useSurvey = () => {
       await updateDoc(doc(db, 'system', 'survey'), {
         isActive: false,
         deactivatedAt: serverTimestamp(),
-        deactivatedBy: uid
+        deactivatedBy: email
       });
       
       dispatch(setSurveyActive(false, null));
@@ -108,7 +108,7 @@ const useSurvey = () => {
 
   // 사용자: 설문조사 응답 저장
   const submitSurveyResponse = async (surveyId, responses, metadata = {}) => {
-    if (!uid || !surveyId || !responses || responses.length === 0) {
+    if (!email || !surveyId || !responses || responses.length === 0) {
       return { success: false, error: '필수 정보가 누락되었습니다.' };
     }
     
@@ -124,7 +124,7 @@ const useSurvey = () => {
       
       // 설문조사 응답 데이터 구조
       const surveyData = {
-        userId: uid,
+        userEmail: email,
         surveyId: surveyId,
         submittedAt: serverTimestamp(),
         responses: responses.map(response => ({
@@ -140,7 +140,7 @@ const useSurvey = () => {
       };
       
       // Firestore에 저장: surveys/{surveyId}/responses/{userId}
-      await setDoc(doc(db, 'surveys', surveyId, 'responses', uid), surveyData);
+      await setDoc(doc(db, 'surveys', surveyId, 'responses', email), surveyData);
       
       // Redux 상태 업데이트
       dispatch(setSurveyCompleted(surveyId));
@@ -183,11 +183,11 @@ const useSurvey = () => {
   
   // 사용자의 특정 설문조사 응답 조회
   const getUserSurveyResponse = async (surveyId) => {
-    if (!uid || !surveyId) return { success: false, error: '사용자 정보 또는 설문조사 ID가 없습니다.' };
+    if (!email || !surveyId) return { success: false, error: '사용자 정보 또는 설문조사 ID가 없습니다.' };
     
     try {
       setLoading(true);
-      const userResponseDoc = await getDoc(doc(db, 'surveys', surveyId, 'responses', uid));
+      const userResponseDoc = await getDoc(doc(db, 'surveys', surveyId, 'responses', email));
       
       if (userResponseDoc.exists()) {
         return { success: true, data: userResponseDoc.data() };
@@ -258,7 +258,7 @@ const useSurvey = () => {
   
   // 사용자: 설문조사 완료 처리 (기존 호환성 유지)
   const markSurveyCompleted = async (surveyId) => {
-    if (!uid || !surveyId) return { success: false, error: '사용자 정보 또는 설문조사 ID가 없습니다.' };
+    if (!email || !surveyId) return { success: false, error: '사용자 정보 또는 설문조사 ID가 없습니다.' };
     
     try {
       dispatch(setSurveyCompleted(surveyId));
@@ -272,10 +272,10 @@ const useSurvey = () => {
 
   // 앱 시작 시 설문조사 상태 확인
   useEffect(() => {
-    if (uid) {
+    if (email) {
       checkGlobalSurveyStatus();
     }
-  }, [uid, checkGlobalSurveyStatus]);
+  }, [email, checkGlobalSurveyStatus]);
 
   return {
     surveyState,

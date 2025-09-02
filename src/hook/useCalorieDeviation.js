@@ -47,16 +47,16 @@ const useCalorieDeviation = () => {
   const user = useSelector((state) => state.auth.user);
 
   // 개인별 calorieBias 저장
-  const savePersonalCalorieBias = useCallback(async (userId, calorieBias) => {
-    if (!userId || calorieBias === undefined) {
-      throw new Error('userId와 calorieBias가 필요합니다.');
+  const savePersonalCalorieBias = useCallback(async (userEmail, calorieBias) => {
+    if (!userEmail || calorieBias === undefined) {
+      throw new Error('userEmail과 calorieBias가 필요합니다.');
     }
 
     setLoading(true);
     setError(null);
 
     try {
-      const userDocRef = doc(db, 'users', userId);
+      const userDocRef = doc(db, 'users', userEmail);
       await updateDoc(userDocRef, {
         calorieBias: Number(calorieBias),
         updatedAt: new Date().toISOString()
@@ -73,11 +73,11 @@ const useCalorieDeviation = () => {
   }, []);
 
   // 개인별 calorieBias 조회
-  const getPersonalCalorieBias = useCallback(async (userId) => {
-    if (!userId) return 0;
+  const getPersonalCalorieBias = useCallback(async (userEmail) => {
+    if (!userEmail) return 0;
 
     try {
-      const userDocRef = doc(db, 'users', userId);
+      const userDocRef = doc(db, 'users', userEmail);
       const userDoc = await getDoc(userDocRef);
       
       if (userDoc.exists()) {
@@ -136,11 +136,11 @@ const useCalorieDeviation = () => {
   }, []);
 
   // 사용자의 그룹 ID 조회
-  const getUserGroupId = useCallback(async (userId) => {
-    if (!userId) return null;
+  const getUserGroupId = useCallback(async (userEmail) => {
+    if (!userEmail) return null;
 
     try {
-      const userDocRef = doc(db, 'users', userId);
+      const userDocRef = doc(db, 'users', userEmail);
       const userDoc = await getDoc(userDocRef);
       
       if (userDoc.exists()) {
@@ -156,10 +156,10 @@ const useCalorieDeviation = () => {
   }, []);
 
   // 편차 설정 조회
-  const getDeviationSettings = useCallback(async (userId, groupId = null) => {
+  const getDeviationSettings = useCallback(async (userEmail, groupId = null) => {
     try {
       // 1. 개별 사용자 설정 확인
-      const userSettingsRef = doc(db, 'deviationSettings', 'users', userId);
+      const userSettingsRef = doc(db, 'deviationSettings', 'users', userEmail);
       const userSettingsDoc = await getDoc(userSettingsRef);
       
       if (userSettingsDoc.exists() && userSettingsDoc.data().isActive) {
@@ -240,8 +240,8 @@ const useCalorieDeviation = () => {
   }, []);
 
   // 개별 사용자 편차 적용
-  const applyDeviation = useCallback(async (userId, date, mealType, deviationConfig) => {
-    if (!userId || !date || !mealType || !deviationConfig) {
+  const applyDeviation = useCallback(async (userEmail, date, mealType, deviationConfig) => {
+    if (!userEmail || !date || !mealType || !deviationConfig) {
       throw new Error('필수 매개변수가 누락되었습니다.');
     }
 
@@ -249,7 +249,7 @@ const useCalorieDeviation = () => {
     setError(null);
 
     try {
-      const foodDocRef = doc(db, 'users', userId, 'foods', date);
+      const foodDocRef = doc(db, 'users', userEmail, 'foods', date);
       const foodDoc = await getDoc(foodDocRef);
 
       if (!foodDoc.exists()) {
@@ -329,7 +329,7 @@ const useCalorieDeviation = () => {
       const settingsData = {
         ...deviationConfig,
         updatedAt: new Date(),
-        appliedBy: user?.uid || 'unknown'
+        appliedBy: user?.email || 'unknown'
       };
 
       if (targetType === 'global') {
@@ -351,8 +351,8 @@ const useCalorieDeviation = () => {
   }, [user]);
 
   // 편차 제거 (원본 데이터로 복원)
-  const removeDeviation = useCallback(async (userId, date, mealType) => {
-    if (!userId || !date || !mealType) {
+  const removeDeviation = useCallback(async (userEmail, date, mealType) => {
+    if (!userEmail || !date || !mealType) {
       throw new Error('필수 매개변수가 누락되었습니다.');
     }
 
@@ -360,7 +360,7 @@ const useCalorieDeviation = () => {
     setError(null);
 
     try {
-      const foodDocRef = doc(db, 'users', userId, 'foods', date);
+      const foodDocRef = doc(db, 'users', userEmail, 'foods', date);
       const foodDoc = await getDoc(foodDocRef);
 
       if (!foodDoc.exists()) {

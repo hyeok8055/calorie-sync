@@ -300,7 +300,7 @@ const Meal = () => {
       const userEmail = auth.currentUser?.email || 'default';
       const sanitizedEmail = userEmail.replace(/[^a-zA-Z0-9]/g, '_');
       
-      // 현재 시간을 yyyy-mm-dd-hh-mm-ss 형식으로 포맷팅 (더 정확한 타임스탬프)
+      // 현재 시간을 yyyy-mm-dd-hh-mm-ss 형식으로 포맷팅 (생성 시간 기록용)
       const now = new Date();
       const year = now.getFullYear();
       const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -310,8 +310,8 @@ const Meal = () => {
       const second = String(now.getSeconds()).padStart(2, '0');
       const timestamp = `${year}-${month}-${day}-${hour}-${minute}-${second}`;
       
-      // 음식이름_이메일_{작성시간} 형식으로 foodKey 생성
-      const foodKey = `${foodData.name}_${sanitizedEmail}_${timestamp}`;
+      // 음식 이름만으로 foodKey 생성 (같은 음식은 덮어쓰기)
+      const foodKey = foodData.name.replace(/[^a-zA-Z0-9가-힣]/g, '_');
       
       const foodsRef = ref(realtimeDb, `foods/${foodKey}`);
       

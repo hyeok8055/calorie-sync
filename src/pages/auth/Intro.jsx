@@ -10,6 +10,7 @@ const { Option } = Select;
 
 const Intro = () => {
   const navigate = useNavigate();
+  const email = useSelector((state) => state.auth.user?.email);
   const uid = useSelector((state) => state.auth.user?.uid);
   const dispatch = useDispatch();
   const [form] = Form.useForm();
@@ -17,7 +18,7 @@ const Intro = () => {
   const [loading, setLoading] = useState(false);
 
   const onFinish = async (values) => {
-    if (!uid) {
+    if (!email) {
       message.error('사용자 정보를 찾을 수 없습니다. 다시 로그인해주세요.');
       return;
     }
@@ -25,7 +26,7 @@ const Intro = () => {
     setLoading(true);
     
     try {
-      const userRef = doc(db, "users", uid);
+      const userRef = doc(db, "users", email);
       
       // 최종 목표값 설정
       const finalGoal = values.goal === 'customGoal' ? values.customGoalText : values.goal;
@@ -44,6 +45,7 @@ const Intro = () => {
       const updatedUserData = {
         ...userData,
         uid,
+        email,
         setupCompleted: true
       };
       

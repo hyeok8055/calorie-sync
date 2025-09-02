@@ -178,6 +178,7 @@ const CalorieAdminPage = () => {
 
       const usersDataPromises = usersSnapshot.docs.map(async (userDoc) => {
         const userData = userDoc.data();
+        const userEmail = userDoc.id; // document ID는 이제 email
         let userGroupValue = userData.group === undefined ? DEFAULT_GROUP_VALUE : userData.group;
 
         const isValidGroup = userGroupValue === DEFAULT_GROUP_VALUE || loadedGroups.some(g => g.name === userGroupValue && !g.isDefault);
@@ -185,9 +186,9 @@ const CalorieAdminPage = () => {
         if (!isValidGroup) {
             userGroupValue = DEFAULT_GROUP_VALUE;
             try {
-              await updateDoc(doc(db, 'users', userDoc.id), { group: DEFAULT_GROUP_VALUE });
+              await updateDoc(doc(db, 'users', userEmail), { group: DEFAULT_GROUP_VALUE });
             } catch (updateError) {
-              console.error(`사용자 ${userDoc.id} 그룹 기본값 업데이트 실패:`, updateError);
+              console.error(`사용자 ${userEmail} 그룹 기본값 업데이트 실패:`, updateError);
             }
         }
 
@@ -196,18 +197,19 @@ const CalorieAdminPage = () => {
         // 선택된 날짜의 food 문서 가져오기
         let foodDocForSelectedDate = null;
         try {
-          const foodDocRef = doc(db, `users/${userDoc.id}/foods`, dateString);
+          const foodDocRef = doc(db, `users/${userEmail}/foods`, dateString);
           const foodDocSnap = await getDoc(foodDocRef);
           if (foodDocSnap.exists()) {
             foodDocForSelectedDate = foodDocSnap.data();
           }
         } catch (error) {
-          console.error(`사용자 ${userDoc.id}의 ${dateString} 음식 문서 로딩 실패:`, error);
+          console.error(`사용자 ${userEmail}의 ${dateString} 음식 문서 로딩 실패:`, error);
         }
 
         return {
-          key: userDoc.id,
-          email: userData.email || '-',
+          key: userEmail, // email을 key로 사용
+          email: userEmail,
+          uid: userData.uid || null, // 호환성을 위해 uid 유지
           name: userData.name || '-',
           age: userData.age || '-',
           gender: userData.gender || '-',
@@ -402,7 +404,8 @@ const CalorieAdminPage = () => {
     }
     
     try {
-      const userRef = doc(db, 'users', currentUser.key);
+      const userEmail = currentUser.key; // email 기반 식별자
+      const userRef = doc(db, 'users', userEmail);
       await updateDoc(userRef, {
         group: values.group,
         calorieBias: values.calorieBias
@@ -416,7 +419,7 @@ const CalorieAdminPage = () => {
         if (currentUser.group !== DEFAULT_GROUP_VALUE) {
           const oldGroup = groups.find(g => g.name === currentUser.group);
           if (oldGroup && !oldGroup.isDefault) {
-            const oldGroupUserRef = doc(db, 'calorieGroups', oldGroup.id, 'users', currentUser.key);
+            const oldGroupUserRef = doc(db, 'calorieGroups', oldGroup.id, 'users', userEmail);
             batch.delete(oldGroupUserRef);
           }
         }
@@ -425,9 +428,10 @@ const CalorieAdminPage = () => {
         if (values.group !== DEFAULT_GROUP_VALUE) {
           const newGroup = groups.find(g => g.name === values.group);
           if (newGroup && !newGroup.isDefault) {
-            const newGroupUserRef = doc(db, 'calorieGroups', newGroup.id, 'users', currentUser.key);
+            const newGroupUserRef = doc(db, 'calorieGroups', newGroup.id, 'users', userEmail);
             batch.set(newGroupUserRef, {
-              uid: currentUser.key,
+              email: userEmail,
+              uid: currentUser.uid, // 호환성을 위해 uid 유지
               addedAt: new Date(),
               addedBy: 'admin'
             });
@@ -442,7 +446,7 @@ const CalorieAdminPage = () => {
       await loadData();
 
     } catch (error) {
-      console.error('사용자 설정 업데이트 실패:', error);
+      console.error('사용자 설정 업데이트 실패:', error, currentUser.key);
       message.error('사용자 설정 업데이트에 실패했습니다.');
     }
   };
@@ -524,15 +528,17 @@ const CalorieAdminPage = () => {
       setLoadingUsers(true);
       const batch = writeBatch(db);
       
-      targetKeysForTransfer.forEach(userKey => {
-        const userRef = doc(db, 'users', userKey);
+      targetKeysForTransfer.forEach(userEmail => {
+        const userRef = doc(db, 'users', userEmail);
         batch.update(userRef, { group: targetGroupValue });
         
-        // calorieGroups/{그룹ID}/users/ 컬렉션에 사용자 UID 저장
+        // calorieGroups/{그룹ID}/users/ 컬렉션에 사용자 email 저장
         if (!targetGroupForAddingUser.isDefault) {
-          const groupUserRef = doc(db, 'calorieGroups', targetGroupForAddingUser.id, 'users', userKey);
+          const groupUserRef = doc(db, 'calorieGroups', targetGroupForAddingUser.id, 'users', userEmail);
+          const user = users.find(u => u.key === userEmail);
           batch.set(groupUserRef, {
-            uid: userKey,
+            email: userEmail,
+            uid: user?.uid, // 호환성을 위해 uid 유지
             addedAt: new Date(),
             addedBy: 'admin'
           });
@@ -605,15 +611,17 @@ const CalorieAdminPage = () => {
         setLoadingUsers(true);
         const batch = writeBatch(db);
         
-        targetKeysForTransfer.forEach(userKey => {
-            const userRef = doc(db, 'users', userKey);
+        targetKeysForTransfer.forEach(userEmail => {
+            const userRef = doc(db, 'users', userEmail);
             batch.update(userRef, { group: targetGroupValue });
             
-            // calorieGroups/{그룹ID}/users/ 컬렉션에 사용자 UID 저장
+            // calorieGroups/{그룹ID}/users/ 컬렉션에 사용자 email 저장
             if (!targetGroupForAddingUser.isDefault) {
-              const groupUserRef = doc(db, 'calorieGroups', targetGroupForAddingUser.id, 'users', userKey);
+              const groupUserRef = doc(db, 'calorieGroups', targetGroupForAddingUser.id, 'users', userEmail);
+              const user = users.find(u => u.key === userEmail);
               batch.set(groupUserRef, {
-                uid: userKey,
+                email: userEmail,
+                uid: user?.uid, // 호환성을 위해 uid 유지
                 addedAt: new Date(),
                 addedBy: 'admin'
               });
@@ -1060,14 +1068,14 @@ const CalorieAdminPage = () => {
   ];
 
   // 칼로리 편차 적용 함수 (선택된 날짜/식사 유형 타겟) - 사용자 데이터 구조 유지
-  const handleApplyUserDeviation = async (userId) => {
+  const handleApplyUserDeviation = async (userEmail) => {
     if (!selectedDate || !selectedMealType) {
         message.error('편차를 적용할 날짜와 식사 유형을 선택하세요.');
         return;
     }
     try {
       setLoadingUsers(true);
-      const userInfo = users.find(u => u.key === userId);
+      const userInfo = users.find(u => u.key === userEmail);
       if (!userInfo) { 
         message.error("사용자 정보를 찾을 수 없습니다."); 
         return; 
@@ -1076,8 +1084,8 @@ const CalorieAdminPage = () => {
       const dateString = selectedDate.format('YYYY-MM-DD');
       const personalBias = userInfo.calorieBias || 0;
       
-      // 사용자의 해당 날짜 음식 문서 가져오기
-      const foodDocRef = doc(db, `users/${userId}/foods`, dateString);
+      // 사용자의 해당 날짜 음식 문서 가져오기 (email 기반)
+      const foodDocRef = doc(db, `users/${userEmail}/foods`, dateString);
       const foodDocSnap = await getDoc(foodDocRef);
       
       if (!foodDocSnap.exists()) {
@@ -1256,11 +1264,11 @@ const CalorieAdminPage = () => {
       // 각 사용자에 대해 편차 적용
       for (const user of targetUsers) {
         try {
-          const userId = user.key;
+          const userEmail = user.key; // email 기반 식별자
           const personalBias = user.calorieBias || 0;
           
-          // 사용자의 해당 날짜 음식 문서 가져오기
-          const foodDocRef = doc(db, `users/${userId}/foods`, dateString);
+          // 사용자의 해당 날짜 음식 문서 가져오기 (email 기반)
+          const foodDocRef = doc(db, `users/${userEmail}/foods`, dateString);
           const foodDocSnap = await getDoc(foodDocRef);
           
           if (!foodDocSnap.exists()) {

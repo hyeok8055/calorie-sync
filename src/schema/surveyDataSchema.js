@@ -1,6 +1,6 @@
 /**
  * 설문조사 데이터 스키마 정의
- * Firebase Firestore: surveys/{surveyId}, userSurveyResponses/{uid}
+ * Firebase Firestore: surveys/{surveyId}/responses/{email}, system/survey
  * 
  * 사용자 설문조사 응답 및 설문 템플릿을 관리
  */
@@ -14,11 +14,12 @@ export const SurveyResponseSchema = {
     description: '설문 응답 고유 식별자'
   },
   
-  // 사용자 ID
-  uid: {
+  // 사용자 이메일
+  userId: {
     type: 'string',
+    format: 'email',
     required: true,
-    description: '응답자 사용자 ID'
+    description: '응답자 이메일'
   },
   
   // 설문 ID
@@ -447,11 +448,12 @@ export const SurveyTemplateSchema = {
     description: '예상 응답 소요 시간 (분)'
   },
   
-  // 생성자
+  // 설문 생성자
   createdBy: {
     type: 'string',
+    format: 'email',
     required: true,
-    description: '설문 생성자 ID'
+    description: '설문 생성자 이메일'
   },
   
   // 생성 시간
@@ -559,18 +561,22 @@ export const FrequencyLevels = {
 };
 
 // 기본 설문 응답 생성 함수
-export const createDefaultSurveyResponse = (uid, surveyId) => {
+export const createDefaultSurveyResponse = (email, surveyId) => {
   return {
-    responseId: `${uid}_${surveyId}_${Date.now()}`,
-    uid,
+    responseId: `${email}_${surveyId}_${Date.now()}`,
+    userId: email,
     surveyId,
-    responses: {},
-    isCompleted: false,
-    completionPercentage: 0,
-    startedAt: new Date().toISOString(),
-    completedAt: null,
-    responseTime: null,
-    updatedAt: new Date().toISOString()
+    responses: [],
+    submittedAt: null,
+    deviceInfo: {
+      platform: 'Unknown',
+      userAgent: '',
+      screenSize: ''
+    },
+    metadata: {
+      source: 'modal',
+      version: '1.0'
+    }
   };
 };
 

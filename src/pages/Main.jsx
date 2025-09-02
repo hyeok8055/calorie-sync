@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { Typography, Row, Col, Card } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import 'dayjs/locale/ko';
@@ -15,48 +15,126 @@ import { CoffeeOutlined, FireOutlined, HistoryOutlined, FormOutlined } from '@an
 
 const { Text, Title } = Typography;
 
+// 시간 제한 설정 상수
+const TIME_RESTRICTIONS = {
+  breakfast: { start: 6, end: 12, label: '06:00 - 11:59' },
+  lunch: { start: 12, end: 18, label: '12:00 - 17:59' },
+  dinner: { start: 18, end: 24, label: '18:00 - 05:59' },
+  snack: { start: 0, end: 24, label: '언제든지 기록 가능' }
+};
+
+// 시간대 카테고리 매핑
+const getTimeCategory = (hour) => {
+  if (hour >= 6 && hour < 12) return '아침';
+  if (hour >= 12 && hour < 18) return '점심';
+  if (hour >= 18) return '저녁';
+  return '새벽';
+};
+
 const Main = () => {
+  // 식사 버튼 설정 (메모이제이션)
+  const mealButtonConfigs = useMemo(() => [
+    {
+      type: 'breakfast',
+      title: '아침식사',
+      icon: <FireOutlined style={{ fontSize: '16px', color: '#ff7875' }} />,
+      color: '#ff7875'
+    },
+    {
+      type: 'lunch', 
+      title: '점심식사',
+      icon: <FireOutlined style={{ fontSize: '16px', color: '#ffa940' }} />,
+      color: '#ffa940'
+    },
+    {
+      type: 'dinner',
+      title: '저녁식사', 
+      icon: <FireOutlined style={{ fontSize: '16px', color: '#597ef7' }} />,
+      color: '#597ef7'
+    },
+    {
+      type: 'snack',
+      title: '간식',
+      icon: <FireOutlined style={{ fontSize: '16px', color: '#73d13d' }} />,
+      color: '#73d13d'
+    }
+  ], []);
+
+  // Redux 상태 및 디스패치
   const dispatch = useDispatch();
-  const uid = useSelector((state) => state.auth.user?.uid);
+  const email = useSelector((state) => state.auth.user?.email);
   const mealFlags = useSelector((state) => state.meal.mealFlags);
-  const { foodData, loading, error } = useFood(uid);
-  const { surveyState, checkGlobalSurveyStatus, checkUserSurveyCompletion } = useSurvey();
-  const [timeRestrictions, setTimeRestrictions] = useState({
-    breakfast: false,
-    lunch: false,
-    dinner: false,
-    snack: false,
-  });
-  const [currentTimeCategory, setCurrentTimeCategory] = useState('');
+  
+  // 커스텀 훅들
+  const { foodData, loading, error } = useFood(email);
+  const { checkGlobalSurveyStatus, checkUserSurveyCompletion } = useSurvey();
+  const { showModal, showAutoModal, isModalAvailable, isAutoModalAvailable } = useModal();
+  const navigate = useNavigate();
+  
+  // 로컬 상태
   const [surveyModalVisible, setSurveyModalVisible] = useState(false);
   const [showSurveyNotification, setShowSurveyNotification] = useState(false);
-  const navigate = useNavigate();
+  
+  // 현재 시간 정보 (메모이제이션)
+  const currentTime = useMemo(() => {
+    const now = new Date();
+    return {
+      hour: now.getHours(),
+      date: now.toLocaleDateString("ko-KR", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).replace(/\.$/, ""),
+      weekday: now.toLocaleDateString("ko-KR", { weekday: "long" })
+    };
+  }, []);
 
-  const { showModal, showAutoModal, isModalAvailable, isAutoModalAvailable } = useModal();
+  // 시간 제한 체크 (메모이제이션)
+  // 시간 제한을 완전히 해제하려면 아래 주석을 해제하고 기존 코드를 주석 처리하세요
+  // const timeRestrictions = useMemo(() => ({
+  //   breakfast: false,
+  //   lunch: false,
+  //   dinner: false,
+  //   snack: false,
+  // }), []);
+  
+  const timeRestrictions = useMemo(() => {
+    const { hour } = currentTime;
+    return {
+      breakfast: hour < 6 || hour >= 12,
+      lunch: hour < 12 || hour >= 18,
+      dinner: hour < 18,
+      snack: false,
+    };
+  }, [currentTime]);
 
-  // 자동 모달 표시를 위한 useEffect 추가
+  // 현재 시간 카테고리 (메모이제이션)
+  const currentTimeCategory = useMemo(() => {
+    return getTimeCategory(currentTime.hour);
+  }, [currentTime.hour]);
+
+  // 자동 모달 표시를 위한 useEffect
   useEffect(() => {
-    if (foodData && isAutoModalAvailable) {
-      // 페이지 로드 후 1초 뒤에 자동 모달 표시
-      const timer = setTimeout(() => {
-        showAutoModal();
-      }, 1000);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [foodData, isAutoModalAvailable, showAutoModal]);
+    const checkAndShowAutoModal = async () => {
+      if (email && isAutoModalAvailable) {
+        await showAutoModal();
+      }
+    };
+
+    checkAndShowAutoModal();
+  }, [email, isAutoModalAvailable, showAutoModal]);
 
   // 설문조사 상태 확인 및 알림 표시
   useEffect(() => {
     const checkSurveyStatus = async () => {
-      if (uid) {
+      if (email) {
         try {
           // 전역 설문조사 상태 확인
           const globalStatus = await checkGlobalSurveyStatus();
           
           if (globalStatus && globalStatus.isActive) {
             // 사용자의 설문조사 완료 여부 확인
-            const userCompletion = await checkUserSurveyCompletion(uid, globalStatus.surveyId);
+            const userCompletion = await checkUserSurveyCompletion(email, globalStatus.surveyId);
             
             // 설문조사가 활성화되어 있고 사용자가 아직 완료하지 않은 경우 알림 표시
             const shouldShow = !userCompletion;
@@ -77,14 +155,14 @@ const Main = () => {
     const interval = setInterval(checkSurveyStatus, 5 * 60 * 1000);
     
     return () => clearInterval(interval);
-  }, [uid, checkGlobalSurveyStatus, checkUserSurveyCompletion]);
+  }, [email, checkGlobalSurveyStatus, checkUserSurveyCompletion]);
 
   // Firestore에서 meal flag 데이터 가져오기
   useEffect(() => {
     const loadMealFlags = async () => {
-      if (uid) {
+      if (email) {
         try {
-          const flags = await getMealFlags(uid);
+          const flags = await getMealFlags(email);
           dispatch(setMealFlags(flags));
         } catch (error) {
           console.error('Meal flags 로드 실패:', error);
@@ -92,7 +170,7 @@ const Main = () => {
       }
     };
     loadMealFlags();
-  }, [uid, dispatch]);
+  }, [email, dispatch]);
 
   useEffect(() => {
     if (foodData) {
@@ -116,83 +194,47 @@ const Main = () => {
     }
   }, [foodData, dispatch]); // mealFlags를 의존성에서 제거하여 무한 루프 방지
 
-  // 시간 제한 확인을 위한 useEffect
-  useEffect(() => {
-    const checkTimeRestrictions = () => {
-      const currentHour = new Date().getHours(); // 24시간 형식 (0-23)
-      
-      // 시간 제한 로직 (24시간 형식 기준)
-      // 아침식사: 06시부터 11시59분까지 기록 가능
-      // 점심식사: 12시부터 17시59분까지 기록 가능
-      // 저녁식사: 18시부터 23시59분까지 기록 가능
-      
-      // 현재 시간대 카테고리 설정
-      if (currentHour >= 6 && currentHour < 12) {
-        setCurrentTimeCategory('아침');
-      } else if (currentHour >= 12 && currentHour < 18) {
-        setCurrentTimeCategory('점심');
-      } else if (currentHour >= 18) {
-        setCurrentTimeCategory('저녁');
-      } else {
-        setCurrentTimeCategory('새벽');
-      }
-      
-      setTimeRestrictions({
-        breakfast: currentHour < 6 || currentHour >= 12, // 6시부터 11시59분까지만 아침식사 가능
-        lunch: currentHour < 12 || currentHour >= 18, // 12시부터 17시59분까지만 점심식사 가능
-        dinner: currentHour < 18 || currentHour >= 24, // 18시부터 23시59분까지만 저녁식사 가능
-        snack: false, // 간식은 제한 없음
-      });
-    };
-
-    checkTimeRestrictions();
-     const intervalId = setInterval(checkTimeRestrictions, 60000); // 1분마다 체크
-     
-     return () => clearInterval(intervalId);
-   }, []);
-   
-  if (loading) {
-    return (
-      <div className="h-[100%] flex justify-center items-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500 mx-auto mb-4"></div>
-          <Text style={{ color: '#666', fontFamily: 'Pretendard-500' }}>데이터를 불러오는 중입니다...</Text>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="h-[100%] flex justify-center items-center">
-        <div className="text-center p-6 bg-red-50 rounded-lg">
-          <Text style={{ color: 'red', fontFamily: 'Pretendard-600', fontSize: '18px' }}>오류가 발생했습니다</Text>
-          <Text style={{ color: '#666', fontFamily: 'Pretendard-500', display: 'block', marginTop: '8px' }}>{error.message}</Text>
-        </div>
-      </div>
-    );
-  }
 
   const handleMealClick = (mealType) => {
     navigate(`/meals/${mealType}`);
   };
 
-  // 단식 스위치 핸들러
-  const handleFastingToggle = async (mealType, checked) => {
+  // 간식이 해당 식사 시간대에 기록되어 있는지 확인하는 함수
+  const hasSnackInMealTime = useCallback((mealType) => {
+    if (!foodData || !foodData.snacks) return false;
+    
+    const snacks = foodData.snacks;
+    if (!snacks.foods || snacks.foods.length === 0) return false;
+    
+    // 간식이 해당 식사 시간대에 통합되어 있는지 확인
+    const mealData = foodData[mealType];
+    if (!mealData || !mealData.foods) return false;
+    
+    // 간식 데이터가 해당 식사에 포함되어 있는지 확인
+    return mealData.foods.some(food => 
+      snacks.foods.some(snack => 
+        snack.name === food.name && snack.brand === food.brand
+      )
+    );
+  }, [foodData]);
+
+  // 단식 스위치 핸들러 (최적화)
+  const handleFastingToggle = useCallback(async (mealType, checked) => {
     const newFlag = checked ? 2 : 0;
+    const previousFlag = mealFlags[mealType];
     
     // Redux 상태 즉시 업데이트
     dispatch(updateMealFlag(mealType, newFlag));
     
     // Firestore에 저장
     try {
-      await updateMealFlagAPI(uid, mealType, newFlag);
+      await updateMealFlagAPI(email, mealType, newFlag);
     } catch (error) {
       console.error('단식 상태 저장 실패:', error);
       // 실패 시 이전 상태로 롤백
-      dispatch(updateMealFlag(mealType, checked ? 0 : 2));
+      dispatch(updateMealFlag(mealType, previousFlag));
     }
-  };
+  }, [email, dispatch, mealFlags]);
 
   // 시간 제한 메시지 반환 함수
   const getTimeRestrictionMessage = (mealType) => {
@@ -208,15 +250,70 @@ const Main = () => {
     }
   };
 
-  // 오늘의 날짜 포맷팅
-  const today = new Date();
-  const formattedDate = today.toLocaleDateString("ko-KR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).replace(/\.$/, "");
-  
-  const weekday = today.toLocaleDateString("ko-KR", { weekday: "long" });
+  // 설문조사 알림 컴포넌트
+  const SurveyNotification = () => {
+    if (!showSurveyNotification) return null;
+    
+    return (
+      <Card 
+        bordered={false} 
+        style={{ 
+          borderRadius: '16px', 
+          marginBottom: '16px',
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)'
+        }}
+        onClick={() => setSurveyModalVisible(true)}
+        className="cursor-pointer hover:shadow-lg transition-all duration-300"
+      >
+        <Row justify="space-between" align="middle">
+          <div style={{ color: 'white' }}>
+            <Text style={{ fontSize: '18px', fontWeight: '700', color: 'white', fontFamily: 'Pretendard-700' }}>
+              📋 설문조사 참여 요청
+            </Text>
+            <br />
+            <Text style={{ fontSize: '14px', color: 'rgba(255,255,255,0.9)', fontFamily: 'Pretendard-500' }}>
+              점심 식사 관련 설문조사에 참여해주세요!
+            </Text>
+          </div>
+          <div style={{ 
+            background: 'rgba(255,255,255,0.2)', 
+            borderRadius: '50%', 
+            padding: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <FormOutlined style={{ fontSize: '24px', color: 'white' }} />
+          </div>
+        </Row>
+      </Card>
+    );
+  };
+
+  // 로딩 상태 처리
+  if (loading) {
+    return (
+      <div className="h-[100%] flex justify-center items-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500 mx-auto mb-4"></div>
+          <Text style={{ color: '#666', fontFamily: 'Pretendard-500' }}>데이터를 불러오는 중입니다...</Text>
+        </div>
+      </div>
+    );
+  }
+
+  // 에러 상태 처리
+  if (error) {
+    return (
+      <div className="h-[100%] flex justify-center items-center">
+        <div className="text-center p-6 bg-red-50 rounded-lg">
+          <Text style={{ color: 'red', fontFamily: 'Pretendard-600', fontSize: '18px' }}>오류가 발생했습니다</Text>
+          <Text style={{ color: '#666', fontFamily: 'Pretendard-500', display: 'block', marginTop: '8px' }}>{error.message}</Text>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-[100%] bg-bg1 p-4 pb-16 overflow-auto">
@@ -232,7 +329,7 @@ const Main = () => {
         <Row justify="space-between" align="middle">
           <div>
             <Text style={{ fontSize: '20px', fontWeight: '700', fontFamily: 'Pretendard-700'}}>
-              {formattedDate} {weekday}
+              {currentTime.date} {currentTime.weekday}
             </Text>
             <br />
             <Text style={{ fontSize: '16px', color: '#666', fontFamily: 'Pretendard-500'}}>
@@ -286,42 +383,7 @@ const Main = () => {
         </Row>
       </Card>
 
-      {/* 설문조사 알림 */}
-      {showSurveyNotification && (
-        <Card 
-          bordered={false} 
-          style={{ 
-            borderRadius: '16px', 
-            marginBottom: '16px',
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)'
-          }}
-          onClick={() => setSurveyModalVisible(true)}
-          className="cursor-pointer hover:shadow-lg transition-all duration-300"
-        >
-          <Row justify="space-between" align="middle">
-            <div style={{ color: 'white' }}>
-              <Text style={{ fontSize: '18px', fontWeight: '700', color: 'white', fontFamily: 'Pretendard-700' }}>
-                📋 설문조사 참여 요청
-              </Text>
-              <br />
-              <Text style={{ fontSize: '14px', color: 'rgba(255,255,255,0.9)', fontFamily: 'Pretendard-500' }}>
-                점심 식사 관련 설문조사에 참여해주세요!
-              </Text>
-            </div>
-            <div style={{ 
-              background: 'rgba(255,255,255,0.2)', 
-              borderRadius: '50%', 
-              padding: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <FormOutlined style={{ fontSize: '24px', color: 'white' }} />
-            </div>
-          </Row>
-        </Card>
-      )}
+      <SurveyNotification />
 
       {/* 식사 기록 버튼 섹션 */}
       <Title level={4} style={{ margin: '24px 0 16px 0', fontFamily: 'Pretendard-700', color: '#5FDD9D' }}>
@@ -329,105 +391,60 @@ const Main = () => {
       </Title>
       
       <Row gutter={[16, 16]} justify="center">
-        {/* 아침 식사 */}
-        <Col span={24}>
-          <Row gutter={[12, 0]} align="middle">
-            <Col span={18}>
-              <MealButton 
-                title="아침 식사 기록"
-                icon={<FireOutlined />}
-                time="06:00 - 11:59"
-                onClick={() => handleMealClick('breakfast')}
-                disabled={mealFlags.breakfast === 1 || mealFlags.breakfast === 2 || timeRestrictions.breakfast}
-                isCompleted={mealFlags.breakfast === 1}
-                isFasting={mealFlags.breakfast === 2}
-                timeRestricted={mealFlags.breakfast === 0 && timeRestrictions.breakfast}
-                restrictionMessage={getTimeRestrictionMessage('breakfast')}
-              />
+        {mealButtonConfigs.map((config) => {
+          const isRestricted = timeRestrictions[config.type];
+          const isFasting = mealFlags[config.type] === 2;
+          const isCompleted = mealFlags[config.type] === 1;
+          const hasSnackData = hasSnackInMealTime(config.type);
+          
+          return (
+            <Col span={24} key={config.type}>
+              {config.type !== 'snack' ? (
+                <Row gutter={[12, 0]} align="middle">
+                  <Col span={18}>
+                    <MealButton 
+                      title={`${config.title} 기록`}
+                      icon={config.icon}
+                      time={TIME_RESTRICTIONS[config.type].label}
+                      onClick={() => handleMealClick(config.type)}
+                      disabled={isCompleted || isFasting || isRestricted}
+                      isCompleted={isCompleted}
+                      isFasting={isFasting}
+                      timeRestricted={mealFlags[config.type] === 0 && isRestricted}
+                      restrictionMessage={getTimeRestrictionMessage(config.type)}
+                    />
+                  </Col>
+                  <Col span={6}>
+                    <FastingSwitch 
+                      isFasting={isFasting}
+                      onChange={(checked) => handleFastingToggle(config.type, checked)}
+                      disabled={isCompleted || hasSnackData}
+                    />
+                  </Col>
+                </Row>
+              ) : (
+                <MealButton 
+                  title={`${config.title} 기록`}
+                  icon={config.icon}
+                  time={TIME_RESTRICTIONS[config.type].label}
+                  onClick={() => handleMealClick(config.type)}
+                  disabled={false}
+                  isCompleted={false}
+                  isFasting={false}
+                  timeRestricted={false}
+                  accent={false}
+                />
+              )}
             </Col>
-            <Col span={6}>
-              <FastingSwitch 
-                isFasting={mealFlags.breakfast === 2}
-                onChange={(checked) => handleFastingToggle('breakfast', checked)}
-                disabled={mealFlags.breakfast === 1}
-              />
-            </Col>
-          </Row>
-        </Col>
-        
-        {/* 점심 식사 */}
-        <Col span={24}>
-          <Row gutter={[12, 0]} align="middle">
-            <Col span={18}>
-              <MealButton 
-                title="점심 식사 기록"
-                icon={<FireOutlined />}
-                time="12:00 - 17:59"
-                onClick={() => handleMealClick('lunch')}
-                disabled={mealFlags.lunch === 1 || mealFlags.lunch === 2 || timeRestrictions.lunch}
-                isCompleted={mealFlags.lunch === 1}
-                isFasting={mealFlags.lunch === 2}
-                timeRestricted={mealFlags.lunch === 0 && timeRestrictions.lunch}
-                restrictionMessage={getTimeRestrictionMessage('lunch')}
-              />
-            </Col>
-            <Col span={6}>
-              <FastingSwitch 
-                isFasting={mealFlags.lunch === 2}
-                onChange={(checked) => handleFastingToggle('lunch', checked)}
-                disabled={mealFlags.lunch === 1}
-              />
-            </Col>
-          </Row>
-        </Col>
-        
-        {/* 저녁 식사 */}
-        <Col span={24}>
-          <Row gutter={[12, 0]} align="middle">
-            <Col span={18}>
-              <MealButton 
-                title="저녁 식사 기록"
-                icon={<FireOutlined />}
-                time="18:00 - 05:59"
-                onClick={() => handleMealClick('dinner')}
-                disabled={mealFlags.dinner === 1 || mealFlags.dinner === 2 || timeRestrictions.dinner}
-                isCompleted={mealFlags.dinner === 1}
-                isFasting={mealFlags.dinner === 2}
-                timeRestricted={mealFlags.dinner === 0 && timeRestrictions.dinner}
-                restrictionMessage={getTimeRestrictionMessage('dinner')}
-              />
-            </Col>
-            <Col span={6}>
-              <FastingSwitch 
-                isFasting={mealFlags.dinner === 2}
-                onChange={(checked) => handleFastingToggle('dinner', checked)}
-                disabled={mealFlags.dinner === 1}
-              />
-            </Col>
-          </Row>
-        </Col>
-        
-        {/* 간식 */}
-        <Col span={24}>
-          <MealButton 
-            title="간식 기록"
-            icon={<CoffeeOutlined />}
-            time="언제든지 기록 가능"
-            onClick={() => handleMealClick('snack')}
-            disabled={false}
-            isCompleted={false}
-            isFasting={false}
-            timeRestricted={false}
-            accent={false}
-          />
-        </Col>
+          );
+        })}
       </Row>
       
       {/* 설문조사 모달 */}
       <SurveyModal 
         visible={surveyModalVisible}
         onClose={() => setSurveyModalVisible(false)}
-        uid={uid}
+        email={email}
       />
     </div>
   );

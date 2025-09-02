@@ -2,10 +2,11 @@
  * 칼로리 편차 설정 스키마 정의
  * Firebase Firestore: 
  * - groupDeviationSettings/{groupId}
- * - personalCalorieBias/{uid}
- * - deviationConfig (전역 설정)
+ * - personalCalorieBias/{email}
+ * - deviationSettings (전역 설정)
  * 
  * 그룹별, 개인별 칼로리 편차 설정을 관리
+ * 주요 변경사항: uid 대신 email을 사용자 식별자로 사용
  */
 
 // 그룹 편차 설정 스키마
@@ -104,8 +105,9 @@ export const GroupDeviationSettingsSchema = {
   // 생성자 정보
   createdBy: {
     type: 'string',
+    format: 'email',
     required: true,
-    description: '설정을 생성한 관리자 UID'
+    description: '설정을 생성한 관리자 이메일'
   },
   
   // 생성 시간
@@ -119,7 +121,8 @@ export const GroupDeviationSettingsSchema = {
   // 마지막 수정자
   updatedBy: {
     type: 'string',
-    description: '설정을 마지막으로 수정한 관리자 UID'
+    format: 'email',
+    description: '설정을 마지막으로 수정한 관리자 이메일'
   },
   
   // 마지막 수정 시간
@@ -132,11 +135,12 @@ export const GroupDeviationSettingsSchema = {
 
 // 개인 칼로리 편향 스키마
 export const PersonalCalorieBiasSchema = {
-  // 사용자 ID
-  uid: {
+  // 사용자 이메일 (Primary Key)
+  email: {
     type: 'string',
+    format: 'email',
     required: true,
-    description: '사용자 고유 식별자'
+    description: '사용자 이메일 주소 (Primary Key)'
   },
   
   // 개인 편향값
@@ -222,11 +226,12 @@ export const DeviationApplicationSchema = {
     description: '편차 적용 고유 식별자'
   },
   
-  // 사용자 ID
-  uid: {
+  // 사용자 이메일
+  email: {
     type: 'string',
+    format: 'email',
     required: true,
-    description: '편차가 적용된 사용자 ID'
+    description: '편차가 적용된 사용자 이메일'
   },
   
   // 식사 날짜
@@ -395,7 +400,8 @@ export const GlobalDeviationConfigSchema = {
   // 마지막 업데이트 정보
   lastUpdatedBy: {
     type: 'string',
-    description: '마지막 수정자 UID'
+    format: 'email',
+    description: '마지막 수정자 이메일'
   },
   
   lastUpdatedAt: {
@@ -459,9 +465,9 @@ export const createDefaultGroupDeviationSettings = (groupId, createdBy) => {
 };
 
 // 기본 개인 편향 설정 생성 함수
-export const createDefaultPersonalCalorieBias = (uid) => {
+export const createDefaultPersonalCalorieBias = (email) => {
   return {
-    uid,
+    email,
     bias: 0,
     calculationBasis: {
       totalMeals: 0,

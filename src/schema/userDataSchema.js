@@ -1,26 +1,29 @@
 /**
  * 사용자 데이터 스키마 정의
- * Firebase Firestore: users/{uid}
+ * Firebase Firestore: users/{email}
  * 
  * 사용자 개인정보, 설정값, 그룹 정보 등을 저장
+ * 주요 변경사항: uid 대신 email을 primary key로 사용
  */
 
 // 사용자 기본 정보 스키마
 export const UserDataSchema = {
-  // 사용자 ID (Firebase Auth UID)
-  uid: {
-    type: 'string',
-    required: true,
-    description: 'Firebase Authentication UID'
-  },
-  
-  // 이메일 주소
+  // 이메일 주소 (Primary Key)
   email: {
     type: 'string',
     format: 'email',
     required: true,
-    description: '사용자 이메일 주소'
+    description: '사용자 이메일 주소 (Primary Key)'
   },
+  
+  // 사용자 ID (Firebase Auth UID) - 호환성을 위해 유지
+  uid: {
+    type: 'string',
+    nullable: true,
+    description: 'Firebase Authentication UID (호환성을 위해 유지)'
+  },
+  
+
   
   // 사용자 이름
   name: {
@@ -293,10 +296,11 @@ export const UserDataSchema = {
 
 // 사용자 통계 정보 스키마 (별도 문서로 관리)
 export const UserStatsSchema = {
-  uid: {
+  email: {
     type: 'string',
+    format: 'email',
     required: true,
-    description: '사용자 ID'
+    description: '사용자 이메일 주소 (Primary Key)'
   },
   
   // 총 기록 일수
@@ -377,10 +381,10 @@ export const AccountStatus = {
 };
 
 // 기본 사용자 데이터 생성 함수
-export const createDefaultUserData = (uid, email, name) => {
+export const createDefaultUserData = (email, name, uid = null) => {
   return {
-    uid,
     email,
+    uid,
     name,
     age: null,
     gender: null,
