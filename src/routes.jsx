@@ -11,8 +11,9 @@ const FoodList = React.lazy(() => import("./pages/food/FoodList"));
 const CaloriEntry = React.lazy(() => import("./pages/calories/CaloriEntry"));
 const Intro = React.lazy(() => import("./pages/auth/Intro"));
 const QnA = React.lazy(() => import("./pages/QnA/qna"));
-const AdminPage = React.lazy(() => import("./pages/auth/AdminPage"));
-const CalorieAdminPage = React.lazy(() => import("./pages/auth/CalorieAdminPage"));
+const AdminPage = React.lazy(() => import("./pages/admin/AdminPage"));
+const CalorieAdminPage = React.lazy(() => import("./pages/admin/CalorieAdminPage"));
+const DataExportPage = React.lazy(() => import("./pages/admin/DataExportPage"));
 const SurveyPage = React.lazy(() => import("./pages/SurveyPage"));
 
 // 로딩 컴포넌트
@@ -31,8 +32,6 @@ const LoadingSpinner = () => (
 const AppRoutes = () => {
   const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
   const user = useSelector((state) => state.auth.user);
-  
-
   
   return (
     <Suspense fallback={<LoadingSpinner />}>
@@ -130,6 +129,14 @@ const AppRoutes = () => {
               element={
                 <Suspense fallback={<LoadingSpinner />}>
                   <SurveyPage />
+                </Suspense>
+              } 
+            />
+            <Route 
+              path="/admin/data-export" 
+              element={
+                <Suspense fallback={<LoadingSpinner />}>
+                  <DataExportPage />
                 </Suspense>
               } 
             />

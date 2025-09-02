@@ -38,8 +38,8 @@ export default () => {
   const today = new Date();
   const [weight, setWeight] = useState(null);
   const [cards, setCards] = useState([]); // 동적으로 추가될 카드 상태
-  const uid = useSelector((state) => state.auth.user?.uid);
-  const { fitnessData, uploadData, deleteData, loading, error } = useFitness(uid);
+  const email = useSelector((state) => state.auth.user?.email);
+  const { fitnessData, uploadData, deleteData, loading, error } = useFitness(email);
   const [calendarData, setCalendarData] = useState({});
   const [forceUpdate, setForceUpdate] = useState(0);
 
@@ -92,8 +92,8 @@ export default () => {
   };
 
   const handleSubmit = async () => {
-    if (!uid) {
-      console.error("UID is not available.");
+    if (!email) {
+      console.error("Email is not available.");
       return;
     }
 

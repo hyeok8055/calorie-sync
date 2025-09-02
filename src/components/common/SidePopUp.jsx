@@ -32,7 +32,7 @@ const SidePopUp = ({ visible, onClose, onLogout, userName, email }) => {
   const [userInfo, setUserInfo] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [surveyStatus, setSurveyStatus] = useState({ isActive: false, surveyId: null });
-  const uid = useSelector((state) => state.auth.user?.uid);
+  const userEmail = useSelector((state) => state.auth.user?.email);
   const [form] = Form.useForm();
   const navigate = useNavigate();
   const { activateSurvey, deactivateSurvey, checkGlobalSurveyStatus, loading: surveyLoading } = useSurvey();
@@ -40,8 +40,8 @@ const SidePopUp = ({ visible, onClose, onLogout, userName, email }) => {
   // 사용자 정보 및 설문조사 상태 불러오기
   useEffect(() => {
     const fetchUserInfo = async () => {
-      if (uid) {
-        const userDoc = await getDoc(doc(db, "users", uid));
+      if (userEmail) {
+        const userDoc = await getDoc(doc(db, "users", userEmail));
         if (userDoc.exists()) {
           setUserInfo(userDoc.data());
           form.setFieldsValue(userDoc.data());
@@ -63,7 +63,7 @@ const SidePopUp = ({ visible, onClose, onLogout, userName, email }) => {
       fetchUserInfo();
       fetchSurveyStatus();
     }
-  }, [uid, visible, checkGlobalSurveyStatus]);
+  }, [userEmail, visible, checkGlobalSurveyStatus]);
 
   const handleEdit = () => {
     setIsEditing(true);
@@ -71,7 +71,7 @@ const SidePopUp = ({ visible, onClose, onLogout, userName, email }) => {
 
   const handleSave = async (values) => {
     try {
-      const userRef = doc(db, "users", uid);
+      const userRef = doc(db, "users", userEmail);
       // 목표값이 '기타'일 경우 customGoalText 사용
       const finalValues = {
         ...values,
@@ -241,11 +241,28 @@ const SidePopUp = ({ visible, onClose, onLogout, userName, email }) => {
                   color={surveyStatus.isActive ? 'danger' : 'warning'}
                   onClick={handleSurveyToggle}
                   loading={surveyLoading}
+                  style={{ marginBottom: '12px' }}
                 >
                   <Space align='center'>
                     <span style={{ fontFamily: 'Pretendard-600' }}>
                       {surveyStatus.isActive ? '설문조사 종료' : '설문조사 실행'}
                     </span>
+                  </Space>
+                </Button>
+              )}
+              {isAdmin && (
+                <Button 
+                  block 
+                  fill='outline' 
+                  shape='rounded' 
+                  color='primary'
+                  onClick={() => {
+                    navigate('/admin/data-export');
+                    onClose();
+                  }}
+                >
+                  <Space align='center'>
+                    <span style={{ fontFamily: 'Pretendard-600' }}>데이터 내보내기</span>
                   </Space>
                 </Button>
               )}

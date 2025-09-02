@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Typography, Input, Row, Col, Button, Modal, Form, Table, InputNumber, message, Checkbox, Space, Select, Tooltip } from 'antd';
 import { realtimeDb, db } from '../../firebaseconfig';
 import { ref, get, update } from "firebase/database";
-import { collection, getDocs, doc, getDoc, updateDoc, query, where } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { useSelector } from 'react-redux';
 import { useNavigate } from "react-router-dom";
 import { useMediaQuery } from 'react-responsive';
@@ -221,7 +221,7 @@ const AdminPage = () => {
       // 모든 사용자 문서 가져오기
       const usersCollection = collection(db, 'users');
       const usersSnapshot = await getDocs(usersCollection);
-      
+    
       let totalUpdates = 0;
       let totalRecords = 0;
 
@@ -588,4 +588,4 @@ const AdminPage = () => {
   );
 };
 
-export default AdminPage; 
+export default AdminPage;

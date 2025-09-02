@@ -11,7 +11,7 @@ const VAPID_KEY = "BBOl7JOGCasgyKCZv1Atq_5MdnvWAWk_iWleIggXfXN3aMGJeuKdEHSTp4OGU
 export const useNotificationPermission = () => {
   const dispatch = useDispatch();
   const deviceInfo = useDeviceInfo();
-  const userId = useSelector((state) => state.auth.user?.uid);
+  const userId = useSelector((state) => state.auth.user?.email);
   const fcmTokenFromStore = useSelector((state) => state.auth.fcmToken);
 
   // 알림 권한 상태 관리
@@ -377,4 +377,4 @@ export const useNotificationPermission = () => {
     isAndroidPwa: deviceInfo?.isAndroidPWA || false,
     swAvailable
   };
-}; 
+};

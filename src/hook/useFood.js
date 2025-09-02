@@ -5,19 +5,20 @@ import { getDatabase, ref, get, orderByChild, equalTo, query as rtdbQuery, limit
 import { useSelector, useDispatch } from 'react-redux';
 import { updateMealFlag } from '@/redux/actions/mealActions';
 import useCalorieDeviation from './useCalorieDeviation';
+import dayjs from 'dayjs';
 
 const getTodayDate = () => {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return dayjs().format('YYYY-MM-DD');
+};
+
+// 어제 날짜 가져오기 함수 추가
+const getYesterdayDate = () => {
+  return dayjs().subtract(1, 'day').format('YYYY-MM-DD');
 };
 
 // 시간대 기준으로 간식이 어느 식사에 포함되는지 결정
 const getSnackMealType = () => {
-  const now = new Date();
-  const hours = now.getHours();
+  const hours = dayjs().hour();
   
   if (hours >= 0 && hours < 12) {
     return 'breakfast';
@@ -27,8 +28,6 @@ const getSnackMealType = () => {
     return 'dinner';
   }
 };
-
-
 
 // 새로운 편차 계산 함수 (요구사항에 맞는 로직)
 const calculateCalorieOffset = (estimatedCalories, actualCalories, groupSettings, personalBias = 0) => {
@@ -65,22 +64,12 @@ const calculateCalorieOffset = (estimatedCalories, actualCalories, groupSettings
   return Math.round(offset);
 };
 
-// 어제 날짜 가져오기 함수 추가
-const getYesterdayDate = () => {
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const year = yesterday.getFullYear();
-  const month = String(yesterday.getMonth() + 1).padStart(2, '0');
-  const day = String(yesterday.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
 export const useFood = () => {
   const [foodData, setFoodData] = useState(null);
   const [yesterdayFoodData, setYesterdayFoodData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const uid = useSelector((state) => state.auth.user?.uid);
+  const email = useSelector((state) => state.auth.user?.email);
   const dispatch = useDispatch();
   const { 
     getDeviationSettings, 
@@ -90,10 +79,10 @@ export const useFood = () => {
   } = useCalorieDeviation();
 
   useEffect(() => {
-    if (uid) {
+    if (email) {
       fetchFoodData();
     }
-  }, [uid]);
+  }, [email]);
 
   const fetchFoodData = async () => {
     setLoading(true);
@@ -102,11 +91,11 @@ export const useFood = () => {
       const yesterday = getYesterdayDate();
       
       // 오늘 데이터 가져오기
-      const docRef = doc(db, 'users', uid, 'foods', today);
+      const docRef = doc(db, 'users', email, 'foods', today);
       const docSnap = await getDoc(docRef);
       
       // 어제 저녁 식사 데이터만 가져오기 (최적화)
-      const yesterdayDocRef = doc(db, 'users', uid, 'foods', yesterday);
+      const yesterdayDocRef = doc(db, 'users', email, 'foods', yesterday);
       const yesterdayDocSnap = await getDoc(yesterdayDocRef);
       
       if (yesterdayDocSnap.exists()) {
@@ -207,15 +196,15 @@ export const useFood = () => {
   // 식사 또는 간식 데이터 저장
   const saveFoodData = useCallback(
     async (mealType, foods = [], estimatedCalories = null, actualCalories = null, selectedFoods = [], flag = 0) => {
-      if (!uid || !mealType) {
-        console.error('uid 또는 mealType이 없습니다:', { uid, mealType });
+      if (!email || !mealType) {
+        console.error('email 또는 mealType이 없습니다:', { email, mealType });
         return;
       }
       
       setLoading(true);
       try {
         const today = getTodayDate();
-        const docRef = doc(db, 'users', uid, 'foods', today);
+        const docRef = doc(db, 'users', email, 'foods', today);
         const docSnap = await getDoc(docRef);
         
         let currentData = docSnap.exists() ? docSnap.data() : { date: today };
@@ -234,11 +223,11 @@ export const useFood = () => {
         })).filter(food => food.name);
 
         // 개인 편차 설정 가져오기
-        const personalBias = await getPersonalCalorieBias(uid);
+        const personalBias = await getPersonalCalorieBias(email);
         
         // 그룹 설정 우선순위: 1) 기존 저장된 그룹 설정, 2) 현재 그룹 설정
         let groupSettings = null;
-        const groupId = await getUserGroupId(uid);
+        const groupId = await getUserGroupId(email);
         
         // 기존 데이터에서 그룹 설정 확인
         if (currentData[mealType]?.groupDeviationConfig) {
@@ -266,7 +255,6 @@ export const useFood = () => {
             flag: 0,
             foods: [],
             originalCalories: { estimated: 0, actual: 0 },
-            finalCalories: { estimated: 0, actual: 0 },
             calorieDeviation: { natural: 0, applied: 0 },
             selectedFoods: [],
             updatedAt: new Date().toISOString()
@@ -276,9 +264,9 @@ export const useFood = () => {
           const existingSnacks = currentData.snacks || {
             foods: [],
             originalCalories: { estimated: 0, actual: 0 },
-            finalCalories: { estimated: 0, actual: 0 },
             calorieDeviation: { natural: 0, applied: 0 },
-            selectedFoods: []
+            selectedFoods: [],
+            updatedAt: new Date().toISOString()
           };
 
           // 간식 데이터 누적
@@ -296,17 +284,14 @@ export const useFood = () => {
               estimated: newSnackEstimated,
               actual: newSnackActual
             },
-            finalCalories: {
-              estimated: newSnackEstimated ? newSnackEstimated + snackOffset : null,
-              actual: newSnackActual ? newSnackActual + snackOffset : null
-            },
             calorieDeviation: {
-              ...existingSnacks.calorieDeviation,
+              natural: newSnackActual && newSnackEstimated ? newSnackActual - newSnackEstimated : 0,
               applied: snackOffset,
               groupSettings: groupSettings,
               personalBias: personalBias
             },
             selectedFoods: [...(existingSnacks.selectedFoods || []), ...(selectedFoods || [])],
+            updatedAt: new Date().toISOString(),
             groupDeviationConfig: groupSettings ? {
               groupId: groupSettings.groupId || groupId,
               deviationMultiplier: groupSettings.deviationMultiplier,
@@ -361,23 +346,53 @@ export const useFood = () => {
             calorieDeviation: { natural: 0, applied: 0 }
           };
           
+          // 기존 간식 데이터가 있다면 보존
+          const existingSnacks = currentData.snacks;
+          
+          // 기존 식사에 간식이 통합되어 있는지 확인
+          const existingSnackCalories = existingSnacks ? {
+            estimated: existingSnacks.originalCalories?.estimated || 0,
+            actual: existingSnacks.originalCalories?.actual || 0
+          } : { estimated: 0, actual: 0 };
+          
+          // 기존 식사 데이터에서 간식 칼로리 제외 (순수 식사 칼로리만)
+          const pureMealEstimated = (existingMealData.originalCalories?.estimated || 0) - existingSnackCalories.estimated;
+          const pureMealActual = (existingMealData.originalCalories?.actual || 0) - existingSnackCalories.actual;
+          
           const originalEstimated = estimatedCalories !== null ? Number(estimatedCalories) : null;
           const originalActual = actualCalories !== null ? Number(actualCalories) : null;
           
-          // 자연 편차 계산 (실제 - 예상)
-          const naturalDeviation = originalActual && originalEstimated ? originalActual - originalEstimated : 0;
+          // 새로운 식사 칼로리 (순수 식사 + 새 입력)
+          const newMealEstimated = Math.max(0, pureMealEstimated) + (originalEstimated || 0);
+          const newMealActual = Math.max(0, pureMealActual) + (originalActual || 0);
           
-          // 새로운 편차 계산 로직 적용
-          const calculatedOffset = originalEstimated && originalActual ? 
-            calculateCalorieOffset(originalEstimated, originalActual, groupSettings, personalBias) : 
+          // 간식과 합친 총 칼로리
+          const totalEstimated = newMealEstimated + existingSnackCalories.estimated;
+          const totalActual = newMealActual + existingSnackCalories.actual;
+          
+          // 자연 편차 계산 (실제 - 예상)
+          const naturalDeviation = totalActual && totalEstimated ? totalActual - totalEstimated : 0;
+          
+          // 새로운 편차 계산 로직 적용 (간식 포함 총 칼로리)
+          const calculatedOffset = totalEstimated && totalActual ? 
+            calculateCalorieOffset(totalEstimated, totalActual, groupSettings, personalBias) : 
             personalBias;
+          
+          // 기존 식사의 음식 목록에서 간식 제외
+          const existingMealFoods = existingMealData.foods || [];
+          const existingSnackFoods = existingSnacks?.foods || [];
+          const pureMealFoods = existingMealFoods.filter(food => 
+            !existingSnackFoods.some(snackFood => 
+              snackFood.name === food.name && snackFood.calories === food.calories
+            )
+          );
           
           currentData[mealType] = {
             flag: Number(flag),
-            foods: validFoods,
+            foods: [...pureMealFoods, ...validFoods, ...(existingSnackFoods)],
             originalCalories: {
-              estimated: originalEstimated,
-              actual: originalActual
+              estimated: totalEstimated,
+              actual: totalActual
             },
             calorieDeviation: {
               natural: naturalDeviation,
@@ -385,7 +400,9 @@ export const useFood = () => {
               groupSettings: groupSettings,
               personalBias: personalBias
             },
-            selectedFoods: selectedFoods || [],
+            selectedFoods: [...(existingMealData.selectedFoods || []).filter(sf => 
+              !existingSnacks?.selectedFoods?.includes(sf)
+            ), ...(selectedFoods || []), ...(existingSnacks?.selectedFoods || [])],
             updatedAt: new Date().toISOString(),
             groupDeviationConfig: groupSettings ? {
               groupId: groupSettings.groupId || groupId,
@@ -395,6 +412,11 @@ export const useFood = () => {
               appliedBy: 'user'
             } : (existingMealData.groupDeviationConfig || null)
           };
+          
+          // 기존 간식 데이터 복원
+          if (existingSnacks) {
+            currentData.snacks = existingSnacks;
+          }
           
           // finalCalories 필드 제거 - originalCalories와 calorieDeviation.applied로 계산 가능
         }
@@ -414,7 +436,7 @@ export const useFood = () => {
         setLoading(false);
       }
     },
-    [uid, getDeviationSettings]
+    [email, getDeviationSettings]
   );
 
   const fetchFoodDetails = useCallback(async (foodNames) => {
@@ -533,7 +555,7 @@ export const useFood = () => {
         try {
           const groupUsersQuery = query(collection(db, 'calorieGroups', groupId, 'users'));
           const groupUsersSnapshot = await getDocs(groupUsersQuery);
-          actualUserIds = groupUsersSnapshot.docs.map(doc => doc.data().uid);
+          actualUserIds = groupUsersSnapshot.docs.map(doc => doc.data().email);
         } catch (error) {
           console.error('그룹 사용자 목록 조회 실패:', error);
           throw new Error('그룹 사용자 목록을 가져올 수 없습니다.');
@@ -541,13 +563,13 @@ export const useFood = () => {
       }
 
       // 각 사용자에 대해 편차 적용
-      for (const userId of actualUserIds) {
+      for (const userEmail of actualUserIds) {
         try {
-          const foodDocRef = doc(db, 'users', userId, 'foods', date);
+          const foodDocRef = doc(db, 'users', userEmail, 'foods', date);
           const foodDoc = await getDoc(foodDocRef);
 
           // 개인 calorieBias 가져오기
-          const personalBias = await getPersonalCalorieBias(userId) || 0;
+          const personalBias = await getPersonalCalorieBias(userEmail) || 0;
           
           // 그룹 설정 가져오기
           const groupSettings = groupId ? await getGroupDeviationSettings(groupId) : null;
@@ -696,15 +718,13 @@ export const useFood = () => {
 
           processedCount++;
         } catch (userError) {
-          console.error(`사용자 ${userId} 처리 중 오류:`, userError);
-          errors.push(`사용자 ${userId}: ${userError.message}`);
+          console.error(`사용자 ${userEmail} 처리 중 오류:`, userError);
+          errors.push(`사용자 ${userEmail}: ${userError.message}`);
         }
       }
 
       // 배치 커밋
       await batch.commit();
-
-
 
       return {
         success: true,

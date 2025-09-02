@@ -30,10 +30,11 @@ const GoogleLogin = () => {
       };
 
       // Firestore에 사용자 정보 저장 또는 업데이트
-      const userRef = doc(db, "users", user.uid);
+      const userRef = doc(db, "users", user.email);
       const userDoc = await getDoc(userRef);
       
       const userData = {
+          uid: user.uid, // uid 정보도 저장
           name: serializedUser.displayName,
           email: serializedUser.email,
           photoURL: serializedUser.photoURL,

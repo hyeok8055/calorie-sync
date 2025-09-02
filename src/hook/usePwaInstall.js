@@ -9,7 +9,6 @@ export const usePwaInstall = () => {
       event.preventDefault();
       setDeferredPrompt(event);
       setShowInstallPrompt(true);
-      // console.log('PWA 설치 가능 (hook): beforeinstallprompt 이벤트 발생');
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);

@@ -25,7 +25,7 @@ const CaloriEntry = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [selectedFoodNames, setSelectedFoodNames] = useState([]);
-  const uid = useSelector((state) => state.auth.user?.uid);
+  const email = useSelector((state) => state.auth.user?.email);
   const { saveFoodData, fetchFoodDetails } = useFood();
   const [foodDetails, setFoodDetails] = useState([]);
   const [mealType, setMealType] = useState('');
