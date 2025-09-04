@@ -49,7 +49,7 @@ const Header = () => {
   );
 
   // 설문조사 페이지에서는 헤더를 숨김
-  if (location.pathname === '/survey') {
+  if (location.pathname === '/survey' || location.pathname === '/admin/data-export' || location.pathname === '/push-message') {
     return null;
   }
 

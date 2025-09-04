@@ -15,6 +15,7 @@ import {
   AppstoreOutline,
   LoopOutline,
   } from 'antd-mobile-icons';
+import { AppstoreOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 
@@ -220,51 +221,138 @@ const SidePopUp = ({ visible, onClose, onLogout, userName, email }) => {
               <Button block fill='outline' shape='rounded' onClick={refreshApp} style={{ marginBottom: '12px' }}>
                  <Space align='center'><LoopOutline /><span style={{ fontFamily: 'Pretendard-600' }}>새로고침</span></Space>
               </Button>
+              
               {isAdmin && (
-                <Button block fill='outline' shape='rounded' color='success' onClick={handleAdminPageClick} style={{ marginBottom: '12px' }}>
-                  <Space align='center'><AppstoreOutline /><span style={{ fontFamily: 'Pretendard-600' }}>음식 데이터 관리</span></Space>
-                </Button>
-              )}
-              {isAdmin && (
-                <Button block fill='outline' shape='rounded' color='primary' onClick={() => {
-                  navigate('/calorie-admin');
-                  onClose();
-                }} style={{ marginBottom: '12px' }}>
-                  <Space align='center'><LoopOutline /><span style={{ fontFamily: 'Pretendard-600' }}>칼로리 편차 관리</span></Space>
-                </Button>
-              )}
-              {isAdmin && (
-                <Button 
-                  block 
-                  fill='outline' 
-                  shape='rounded' 
-                  color={surveyStatus.isActive ? 'danger' : 'warning'}
-                  onClick={handleSurveyToggle}
-                  loading={surveyLoading}
-                  style={{ marginBottom: '12px' }}
-                >
-                  <Space align='center'>
-                    <span style={{ fontFamily: 'Pretendard-600' }}>
-                      {surveyStatus.isActive ? '설문조사 종료' : '설문조사 실행'}
-                    </span>
-                  </Space>
-                </Button>
-              )}
-              {isAdmin && (
-                <Button 
-                  block 
-                  fill='outline' 
-                  shape='rounded' 
-                  color='primary'
-                  onClick={() => {
-                    navigate('/admin/data-export');
-                    onClose();
-                  }}
-                >
-                  <Space align='center'>
-                    <span style={{ fontFamily: 'Pretendard-600' }}>데이터 내보내기</span>
-                  </Space>
-                </Button>
+                <>
+                  {/* 관리자 메뉴 섹션 */}
+                  <div style={{ 
+                    background: '#f0f8ff', 
+                    borderRadius: '8px', 
+                    padding: '2px', 
+                    marginBottom: '12px',
+                    border: '1px solid #e6f7ff'
+                  }}>
+                    <Text style={{ 
+                      fontFamily: 'Pretendard-700', 
+                      fontSize: '14px', 
+                      color: '#1890ff',
+                      display: 'block',
+                      marginBottom: '4px',
+                      textAlign: 'center'
+                    }}>
+                      🔧 관리자 메뉴
+                    </Text>
+                    
+                    {/* 관리자 버튼들을 2열 그리드로 배치 */}
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: '1fr 1fr', 
+                      gap: '8px',
+                      marginBottom: '8px'
+                    }}>
+                      <Button 
+                        fill='outline' 
+                        shape='box' 
+                        color='success' 
+                        size='small'
+                        onClick={handleAdminPageClick}
+                        style={{ 
+                          fontSize: '11px',
+                          padding: '8px 4px',
+                          height: 'auto',
+                          '--border-color': '#52c41a'
+                        }}
+                      >
+                        <Space direction='vertical' align='center' style={{ '--gap': '2px', padding: '15px 0 15px 0'  }}>
+                          <span style={{ fontFamily: 'Pretendard-600', lineHeight: '1.2', fontSize: '16px' }}>음식 데이터 관리</span>
+                        </Space>
+                      </Button>
+                      
+                      <Button 
+                        fill='outline' 
+                        shape='box' 
+                        color='primary' 
+                        size='small'
+                        onClick={() => {
+                          navigate('/calorie-admin');
+                          onClose();
+                        }}
+                        style={{ 
+                          fontSize: '11px',
+                          padding: '8px 4px',
+                          height: 'auto',
+                          '--border-color': '#1890ff'
+                        }}
+                      >
+                        <Space direction='vertical' align='center' style={{ '--gap': '2px', padding: '15px 0 15px 0'  }}>
+                          <span style={{ fontFamily: 'Pretendard-600', lineHeight: '1.2', fontSize : '16px' }}>칼로리 편차 관리</span>
+                        </Space>
+                      </Button>
+                      
+                      <Button 
+                        fill='outline' 
+                        shape='box' 
+                        color={surveyStatus.isActive ? 'danger' : 'warning'}
+                        size='small'
+                        onClick={handleSurveyToggle}
+                        loading={surveyLoading}
+                        style={{ 
+                          fontSize: '11px',
+                          padding: '8px 4px',
+                          height: 'auto'
+                        }}
+                      >
+                        <Space direction='vertical' align='center' style={{ '--gap': '2px', padding: '15px 0 15px 0' }}>
+                          <span style={{ fontFamily: 'Pretendard-600', lineHeight: '1.2', fontSize : '16px' }}>
+                            {surveyStatus.isActive ? '설문조사 종료' : '설문조사 실행'}
+                          </span>
+                        </Space>
+                      </Button>
+                      
+                      <Button 
+                        fill='outline' 
+                        shape='box' 
+                        color='primary'
+                        size='small'
+                        onClick={() => {
+                          navigate('/admin/data-export');
+                          onClose();
+                        }}
+                        style={{ 
+                          fontSize: '11px',
+                          padding: '8px 4px',
+                          height: 'auto',
+                          '--border-color': '#1890ff'
+                        }}
+                      >
+                        <Space direction='vertical' align='center' style={{ '--gap': '2px', padding: '15px 0 15px 0' }}>
+                          <span style={{ fontFamily: 'Pretendard-600', lineHeight: '1.2', fontSize : '16px'}}>데이터 내보내기</span>
+                        </Space>
+                      </Button>
+                    </div>
+                    
+                    {/* 수동 메시지 발송은 별도 행으로 */}
+                    <Button 
+                      block 
+                      fill='outline' 
+                      shape='box' 
+                      color='warning'
+                      onClick={() => {
+                        navigate('/push-message');
+                        onClose();
+                      }}
+                      style={{ 
+                        fontSize: '12px',
+                        '--border-color': '#faad14'
+                      }}
+                    >
+                      <Space align='center' style={{margin: '10px 0'}}>
+                        <span style={{ fontSize: '19px' }}>📢</span>
+                        <span style={{ fontFamily: 'Pretendard-600', fontSize : "18px" }}>수동 메시지 발송</span>
+                      </Space>
+                    </Button>
+                  </div>
+                </>
               )}
             </div>
           </List>
