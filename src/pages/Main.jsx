@@ -17,9 +17,9 @@ const { Text, Title } = Typography;
 
 // 시간 제한 설정 상수
 const TIME_RESTRICTIONS = {
-  breakfast: { start: 6, end: 12, label: '06:00 - 11:59' },
-  lunch: { start: 12, end: 18, label: '12:00 - 17:59' },
-  dinner: { start: 18, end: 24, label: '18:00 - 05:59' },
+  breakfast: { start: 6.5, end: 10, label: '06:30 - 10:00' },
+  lunch: { start: 11, end: 16, label: '11:00 - 16:00' },
+  dinner: { start: 17, end: 6, label: '17:00 - 05:59' },
   snack: { start: 0, end: 24, label: '언제든지 기록 가능' }
 };
 
@@ -80,6 +80,8 @@ const Main = () => {
     const now = new Date();
     return {
       hour: now.getHours(),
+      minute: now.getMinutes(),
+      totalMinutes: now.getHours() * 60 + now.getMinutes(),
       date: now.toLocaleDateString("ko-KR", {
         year: "numeric",
         month: "2-digit",
@@ -99,11 +101,27 @@ const Main = () => {
   // }), []);
   
   const timeRestrictions = useMemo(() => {
-    const { hour } = currentTime;
+    const { totalMinutes } = currentTime;
+    
+    // 아침: 06:30 ~ 10:00 (390 ~ 600분)
+    // const breakfastAllowed = totalMinutes >= 6 * 60 + 30 && totalMinutes <= 10 * 60;
+    const breakfastAllowed = true
+
+    
+    // 점심: 11:00 ~ 16:00 (660 ~ 960분)
+    // const lunchAllowed = totalMinutes >= 11 * 60 && totalMinutes <= 16 * 60;
+    const lunchAllowed = true;
+
+    
+    // 저녁: 17:00 ~ 05:59 (1020 ~ 1439분, 또는 0 ~ 359분)
+    // const dinnerAllowed = totalMinutes >= 17 * 60 || totalMinutes <= 5 * 60 + 59;
+    const dinnerAllowed = true;
+
+    
     return {
-      breakfast: hour < 6 || hour >= 12,
-      lunch: hour < 12 || hour >= 18,
-      dinner: hour < 18,
+      breakfast: !breakfastAllowed,
+      lunch: !lunchAllowed,
+      dinner: !dinnerAllowed,
       snack: false,
     };
   }, [currentTime]);
@@ -240,11 +258,11 @@ const Main = () => {
   const getTimeRestrictionMessage = (mealType) => {
     switch (mealType) {
       case 'breakfast':
-        return '06시부터 11시59분까지만 기록 가능';
+        return '06시30분부터 10시까지만 기록 가능';
       case 'lunch':
-        return '12시부터 17시59분까지만 기록 가능';
+        return '11시부터 16시까지만 기록 가능';
       case 'dinner':
-        return '18시부터 23시59분까지만 기록 가능';
+        return '17시부터 05시59분까지만 기록 가능';
       default:
         return '';
     }

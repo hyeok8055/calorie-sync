@@ -230,107 +230,62 @@ export const useModal = (testMode = false) => {
 
   // 자동으로 표시할 수 있는 모달이 있는지 확인하는 함수
   const checkAutoModalAvailable = useCallback(() => {
+    // 임시 변경: 시간 기반 제약을 모두 주석 처리하고,
+    // 식사 기록이 존재하면 즉시(해당 식사 데이터가 있을 때) 자동 모달을 허용합니다.
+    // 기존 시간 기반 로직은 아래에 주석으로 남겨둡니다.
+
     if (testMode || !foodData) return { available: false, mealType: null };
 
-    const now = new Date();
-    const hours = now.getHours();
-
-    // 현재 시간에 따라 조회 가능한 식사 타입 결정
-    let allowedMealType = null;
-    if (hours >= 6 && hours <= 10) {
-      allowedMealType = 'dinner';  // 전날 저녁 식사 결과
-    } else if (hours >= 11 && hours <= 14) {
-      allowedMealType = 'breakfast';  // 아침 식사 결과
-    } else if (hours >= 17 && hours <= 20) {
-      allowedMealType = 'lunch';  // 점심 식사 결과
-    }
-
-    // 현재 시간대에 조회 가능한 식사가 있는지 먼저 확인
-    if (allowedMealType) {
-      const meal = foodData[allowedMealType];
-      const hasData = meal && 
-        meal.originalCalories?.actual !== undefined && 
-        meal.originalCalories?.actual !== null &&
-        meal.originalCalories?.estimated !== undefined && 
-        meal.originalCalories?.estimated !== null;
-      
-      const notViewed = !viewedMeals[allowedMealType];
-      
-      // 저녁 식사는 다음 날 아침에만 조회 가능하도록 제한
-      if (allowedMealType === 'dinner') {
-        // 저녁 식사는 다음 날 아침(6시-10시)에만 조회 가능
-        if (hasData && notViewed && hours >= 6 && hours <= 10) {
-          return { available: true, mealType: allowedMealType };
-        }
-      } else if (hasData && notViewed) {
-        return { available: true, mealType: allowedMealType };
-      }
-    }
-
-    // 현재 시간대에 조회할 식사가 없다면, 미조회된 식사 중 조회 가능한 시간이 지난 것만 찾기
     const mealsToCheck = ['breakfast', 'lunch', 'dinner'];
-    
+
     for (const mealType of mealsToCheck) {
-      // 저녁 식사는 어제 데이터를 사용, 나머지는 오늘 데이터 사용
       const dataSource = mealType === 'dinner' ? yesterdayFoodData : foodData;
       const meal = dataSource?.[mealType];
-      const hasData = meal && 
-        meal.originalCalories?.actual !== undefined && 
+      const hasData = meal &&
+        meal.originalCalories?.actual !== undefined &&
         meal.originalCalories?.actual !== null &&
-        meal.originalCalories?.estimated !== undefined && 
+        meal.originalCalories?.estimated !== undefined &&
         meal.originalCalories?.estimated !== null;
-      
+
       const notViewed = !viewedMeals[mealType];
-      
-      // 각 식사별로 조회 가능한 시간이 지났는지 확인
-      let canViewThisMeal = false;
-      if (mealType === 'breakfast' && hours >= 11) {
-        canViewThisMeal = true; // 아침식사는 11시 이후부터 조회 가능
-      } else if (mealType === 'lunch' && hours >= 17) {
-        canViewThisMeal = true; // 점심식사는 17시 이후부터 조회 가능
-      } else if (mealType === 'dinner' && hours >= 6 && hours <= 10) {
-        // 저녁식사는 다음날 아침 6시부터 10시까지만 조회 가능
-        canViewThisMeal = true;
-      }
-      
-      if (hasData && notViewed && canViewThisMeal) {
+
+      // 기록이 있으면 즉시 자동 모달 허용 (단, 이미 본 것은 제외)
+      if (hasData && notViewed) {
         return { available: true, mealType };
       }
     }
-    
+
     return { available: false, mealType: null };
   }, [foodData, viewedMeals, testMode]);
 
   // 기존 시간 제한 기반 모달 확인 함수
   const checkModalAvailable = useCallback(() => {
-    if (testMode) return { available: true, mealType: 'lunch' };
+    // 임시 변경: 시간 제한을 무시하고, 데이터가 존재하면 즉시 조회 가능하게 함.
+    if (testMode) return { available: true, mealType: 'lunch', isValidTime: true };
 
-    const now = new Date();
-    const hours = now.getHours();
+    const mealsToCheck = ['breakfast', 'lunch', 'dinner'];
 
-    let mealType = null;
+    for (const mealType of mealsToCheck) {
+      const dataSource = mealType === 'dinner' ? yesterdayFoodData : foodData;
+      const meal = dataSource?.[mealType];
+      const hasData = meal &&
+        meal.originalCalories?.actual !== undefined &&
+        meal.originalCalories?.actual !== null &&
+        meal.originalCalories?.estimated !== undefined &&
+        meal.originalCalories?.estimated !== null;
 
-    // 새로운 시간 기준으로 수정
-    if (hours >= 6 && hours <= 10) {
-      mealType = 'dinner';  // 전날 저녁 식사 결과
-    } else if (hours >= 11 && hours <= 14) {
-      mealType = 'breakfast';  // 아침 식사 결과
-    } else if (hours >= 17 && hours <= 20) {
-      mealType = 'lunch';  // 점심 식사 결과
+      const notViewed = !viewedMeals[mealType];
+
+      if (hasData && notViewed) {
+        return {
+          available: true,
+          mealType,
+          isValidTime: true
+        };
+      }
     }
 
-    // 해당 시간대에 표시할 식사 데이터가 있는지 확인
-    // 저녁 식사는 어제 데이터를 사용, 나머지는 오늘 데이터 사용
-    const dataSource = mealType === 'dinner' ? yesterdayFoodData : foodData;
-    const hasData = mealType && dataSource?.[mealType] && 
-      (dataSource[mealType].originalCalories?.actual !== undefined && 
-       dataSource[mealType].originalCalories?.estimated !== undefined);
-
-    return { 
-      available: hasData, 
-      mealType,
-      isValidTime: mealType !== null // 유효한 시간대인지 여부
-    };
+    return { available: false, mealType: null, isValidTime: false };
   }, [foodData, testMode]);
 
   // 모달을 표시하는 함수 (수동 클릭)
@@ -367,9 +322,9 @@ export const useModal = (testMode = false) => {
             </Text>
             <br />
             <Text style={{ fontSize: 14, color: '#666', lineHeight: 1.8 }}>
-              - 아침 식사 결과: 오전 11시 ~ 오후 2시<br />
-              - 점심 식사 결과: 오후 5시 ~ 오후 8시<br />
-              - 저녁 식사 결과: 오전 6시 ~ 오전 10시
+              - 아침 식사 결과: 오전 10:30 ~ 오후 2시<br />
+              - 점심 식사 결과: 오후 4:30 ~ 오후 8시<br />
+              - 저녁 식사 결과: 오전 6:30 ~ 오전 10시
             </Text>
           </div>
         );
