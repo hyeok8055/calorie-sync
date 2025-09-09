@@ -20,17 +20,24 @@ const SurveyPage = () => {
   const [lunchCalorieDifference, setLunchCalorieDifference] = useState(null);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [checkingSubmission, setCheckingSubmission] = useState(true);
+  const [isGroupApplied, setIsGroupApplied] = useState(false);
 
   // 점심 칼로리 편차 확인 - applied 값이 음수일 때만 6번 문항 표시
   useEffect(() => {
-    if (foodData && foodData.lunch && foodData.lunch.calorieDeviation && foodData.lunch.calorieDeviation.applied) {
-      if (foodData.lunch.calorieDeviation.applied < 0) {
-        setLunchCalorieDifference(Math.abs(foodData.lunch.calorieDeviation.applied));
+    if (foodData && foodData.lunch && foodData.lunch.calorieDeviation) {
+      const applied = foodData.lunch.calorieDeviation.applied;
+      if (applied < 0) {
+        setLunchCalorieDifference(Math.abs(applied));
       } else {
         setLunchCalorieDifference(0);
       }
+      
+      // 그룹 편차 적용 여부 확인
+      const groupSettings = foodData.lunch.calorieDeviation.groupSettings;
+      setIsGroupApplied(!!groupSettings && Object.keys(groupSettings).length > 0);
     } else {
       setLunchCalorieDifference(0);
+      setIsGroupApplied(false);
     }
   }, [foodData]);
 
@@ -137,6 +144,7 @@ const SurveyPage = () => {
         q5_food_consciousness: values.q5_food_consciousness,
         q6_less_intake_reaction: lunchCalorieDifference > 0 ? values.q6_less_intake_reaction : null,
         q6_follow_up: (lunchCalorieDifference > 0 && showQ6Follow) ? values.q6_follow_up : null,
+        is_group: isGroupApplied,
         submittedAt: serverTimestamp(),
         timestamp: new Date().toISOString()
       };

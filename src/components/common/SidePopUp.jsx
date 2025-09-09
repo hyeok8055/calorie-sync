@@ -329,28 +329,47 @@ const SidePopUp = ({ visible, onClose, onLogout, userName, email }) => {
                           <span style={{ fontFamily: 'Pretendard-600', lineHeight: '1.2', fontSize : '16px'}}>데이터 내보내기</span>
                         </Space>
                       </Button>
+                      
+                      <Button 
+                        fill='outline' 
+                        shape='box' 
+                        color='success'
+                        size='small'
+                        onClick={() => {
+                          navigate('/survey-results');
+                          onClose();
+                        }}
+                        style={{ 
+                          fontSize: '11px',
+                          padding: '8px 4px',
+                          height: 'auto',
+                          '--border-color': '#52c41a'
+                        }}
+                      >
+                        <Space direction='vertical' align='center' style={{ '--gap': '2px', padding: '15px 0 15px 0' }}>
+                          <span style={{ fontFamily: 'Pretendard-600', lineHeight: '1.2', fontSize : '16px'}}>설문조사 결과</span>
+                        </Space>
+                      </Button>
+                      {/* 수동 메시지 발송*/}
+                      <Button 
+                        block 
+                        fill='outline' 
+                        shape='box' 
+                        color='warning'
+                        onClick={() => {
+                          navigate('/push-message');
+                          onClose();
+                        }}
+                        style={{ 
+                          fontSize: '12px',
+                          '--border-color': '#faad14'
+                        }}
+                      >
+                        <Space flexDirection='column' align='center' style={{margin: '10px 0'}}>
+                          <span style={{ fontFamily: 'Pretendard-600', fontSize : "16px" }}>수동 메시지 발송</span>
+                        </Space>
+                      </Button>
                     </div>
-                    
-                    {/* 수동 메시지 발송은 별도 행으로 */}
-                    <Button 
-                      block 
-                      fill='outline' 
-                      shape='box' 
-                      color='warning'
-                      onClick={() => {
-                        navigate('/push-message');
-                        onClose();
-                      }}
-                      style={{ 
-                        fontSize: '12px',
-                        '--border-color': '#faad14'
-                      }}
-                    >
-                      <Space align='center' style={{margin: '10px 0'}}>
-                        <span style={{ fontSize: '19px' }}>📢</span>
-                        <span style={{ fontFamily: 'Pretendard-600', fontSize : "18px" }}>수동 메시지 발송</span>
-                      </Space>
-                    </Button>
                   </div>
                 </>
               )}

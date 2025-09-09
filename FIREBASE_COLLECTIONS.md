@@ -135,10 +135,18 @@ surveys/{surveyId}
 ├── createdAt: timestamp
 ├── updatedAt: timestamp
 └── responses/{email} (서브컬렉션)
-    ├── userId: string (응답자 이메일)
+    ├── userEmail: string (응답자 이메일)
     ├── surveyId: string (설문 ID)
-    ├── responses: array (응답 목록)
+    ├── q1_daily_calories: number (하루 칼로리 섭취량)
+    ├── q2_on_diet: string (다이어트 여부: 'yes'|'no')
+    ├── q3_weight_control_motivation: number (체중 조절 동기: 1-7 척도)
+    ├── q4_forbidden_food_behavior: number (금지 음식 섭취 후 행동: 1-4)
+    ├── q5_food_consciousness: number (음식 의식 정도: 1-7 척도)
+    ├── q6_less_intake_reaction: string|number (적게 섭취한 반응)
+    ├── q6_follow_up: string (추가 설명)
+    ├── is_group: boolean (그룹 편차 적용 여부)
     ├── submittedAt: timestamp (제출일)
+    ├── timestamp: string (제출 시각 ISO 문자열)
     ├── deviceInfo: object (기기 정보)
     └── metadata: object (메타데이터)
 ```

@@ -16,6 +16,7 @@ const CalorieAdminPage = React.lazy(() => import("./pages/admin/CalorieAdminPage
 const DataExportPage = React.lazy(() => import("./pages/admin/DataExportPage"));
 const PushMessagePage = React.lazy(() => import("./pages/admin/PushMessagePage"));
 const SurveyPage = React.lazy(() => import("./pages/SurveyPage"));
+const SurveyResultsPage = React.lazy(() => import("./pages/admin/SurveyResultsPage"));
 
 // 로딩 컴포넌트
 const LoadingSpinner = () => (
@@ -146,6 +147,14 @@ const AppRoutes = () => {
               element={
                 <Suspense fallback={<LoadingSpinner />}>
                   <PushMessagePage />
+                </Suspense>
+              } 
+            />
+            <Route 
+              path="/survey-results" 
+              element={
+                <Suspense fallback={<LoadingSpinner />}>
+                  <SurveyResultsPage />
                 </Suspense>
               } 
             />
