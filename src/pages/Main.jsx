@@ -104,18 +104,18 @@ const Main = () => {
     const { totalMinutes } = currentTime;
     
     // 아침: 06:30 ~ 10:00 (390 ~ 600분)
-    // const breakfastAllowed = totalMinutes >= 6 * 60 + 30 && totalMinutes <= 10 * 60;
-    const breakfastAllowed = true
+    const breakfastAllowed = totalMinutes >= 6 * 60 + 30 && totalMinutes <= 10 * 60;
+    // const breakfastAllowed = true
 
     
     // 점심: 11:00 ~ 16:00 (660 ~ 960분)
-    // const lunchAllowed = totalMinutes >= 11 * 60 && totalMinutes <= 16 * 60;
-    const lunchAllowed = true;
+    const lunchAllowed = totalMinutes >= 11 * 60 && totalMinutes <= 16 * 60;
+    // const lunchAllowed = true;
 
     
     // 저녁: 17:00 ~ 05:59 (1020 ~ 1439분, 또는 0 ~ 359분)
-    // const dinnerAllowed = totalMinutes >= 17 * 60 || totalMinutes <= 5 * 60 + 59;
-    const dinnerAllowed = true;
+    const dinnerAllowed = totalMinutes >= 17 * 60 || totalMinutes <= 5 * 60 + 59;
+    // const dinnerAllowed = true;
 
     
     return {
