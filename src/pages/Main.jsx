@@ -348,8 +348,9 @@ const Main = () => {
         style={{ 
           borderRadius: '16px', 
           marginBottom: '16px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+          boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
         }}
+        bodyStyle={{ padding: '20px' }}
       >
         <Row justify="space-between" align="middle">
           <div>
@@ -391,8 +392,8 @@ const Main = () => {
                 alignItems: 'center'
               }}
             >
-              <HistoryOutlined style={{ fontSize: '20px', color: isModalAvailable ? '#5FDD9D' : '#999' }} />
-              <Text style={{ fontSize: '16px', fontFamily: 'Pretendard-500', marginLeft: '8px' }}>기록 확인하기</Text>
+              <HistoryOutlined style={{ fontSize: '18px', color: isModalAvailable ? '#5FDD9D' : '#999' }} />
+              <Text style={{ fontSize: '14px', fontFamily: 'Pretendard-600', marginLeft: '5px' }}>식사기록확인</Text>
               {isModalAvailable && (
                 <div style={{
                   position: 'absolute',
