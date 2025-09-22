@@ -16,17 +16,18 @@ const getYesterdayDate = () => {
   return dayjs().subtract(1, 'day').format('YYYY-MM-DD');
 };
 
-// 시간대 기준으로 간식이 어느 식사에 포함되는지 결정
+// 시간대 기준으로 간식이 어느 식사에 포함되는지 결정 (요구사항 #1 반영)
 const getSnackMealType = () => {
-  const hours = dayjs().hour();
-  
-  if (hours >= 0 && hours < 12) {
-    return 'breakfast';
-  } else if (hours >= 12 && hours < 18) {
-    return 'lunch';
-  } else {
-    return 'dinner';
-  }
+  const h = dayjs().hour();
+  const m = dayjs().minute();
+  const total = h * 60 + m;
+
+  // 아침: 06:30 ~ 10:29
+  if (total >= (6 * 60 + 30) && total <= (10 * 60 + 29)) return 'breakfast';
+  // 점심: 10:30 ~ 16:29
+  if (total >= (10 * 60 + 30) && total <= (16 * 60 + 29)) return 'lunch';
+  // 저녁: 그 외 시간 (16:30 ~ 익일 06:29)
+  return 'dinner';
 };
 
 // 새로운 편차 계산 함수 (요구사항에 맞는 로직)

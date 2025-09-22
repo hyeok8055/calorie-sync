@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { Typography, Row, Col, Card } from 'antd';
+import { message } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import 'dayjs/locale/ko';
 import { useSelector, useDispatch } from 'react-redux';
@@ -16,19 +17,28 @@ import { CoffeeOutlined, FireOutlined, HistoryOutlined, FormOutlined } from '@an
 const { Text, Title } = Typography;
 
 // 시간 제한 설정 상수
+// 요구사항 1: 아침 06:30~10:30, 점심 10:30~16:30, 저녁 16:30~06:29
 const TIME_RESTRICTIONS = {
-  breakfast: { start: 6.5, end: 10, label: '06:30 - 10:00' },
-  lunch: { start: 11, end: 16, label: '11:00 - 16:00' },
-  dinner: { start: 17, end: 6, label: '17:00 - 05:59' },
+  breakfast: { start: 6.5, end: 10.5, label: '06:30 - 10:30' },
+  lunch: { start: 10.5, end: 16.5, label: '10:30 - 16:30' },
+  dinner: { start: 16.5, end: 6.4833, label: '16:30 - 06:29' },
   snack: { start: 0, end: 24, label: '언제든지 기록 가능' }
 };
 
-// 시간대 카테고리 매핑
-const getTimeCategory = (hour) => {
-  if (hour >= 6 && hour < 12) return '아침';
-  if (hour >= 12 && hour < 18) return '점심';
-  if (hour >= 18) return '저녁';
-  return '새벽';
+// 시간대 카테고리 매핑 (요구사항 1과 동일하게 통일)
+const getTimeCategory = (totalMinutes) => {
+  // 분 단위 비교: 아침 [06:30, 10:30), 점심 [10:30, 16:30), 저녁 [16:30, 익일 06:29]
+  const breakfastStart = 6 * 60 + 30; // 390
+  const breakfastEndExclusive = 10 * 60 + 30; // 630 (exclusive)
+  const lunchStart = breakfastEndExclusive; // 630
+  const lunchEndExclusive = 16 * 60 + 30; // 990 (exclusive)
+  const dinnerStart = lunchEndExclusive; // 990
+  const dinnerEndInclusive = 6 * 60 + 29; // 389 (inclusive next day)
+
+  if (totalMinutes >= breakfastStart && totalMinutes < breakfastEndExclusive) return '아침';
+  if (totalMinutes >= lunchStart && totalMinutes < lunchEndExclusive) return '점심';
+  // 나머지는 저녁 시간대
+  return '저녁';
 };
 
 const Main = () => {
@@ -102,22 +112,14 @@ const Main = () => {
   
   const timeRestrictions = useMemo(() => {
     const { totalMinutes } = currentTime;
-    
-    // 아침: 06:30 ~ 10:00 (390 ~ 600분)
-    const breakfastAllowed = totalMinutes >= 6 * 60 + 30 && totalMinutes <= 10 * 60;
-    // const breakfastAllowed = true
 
-    
-    // 점심: 11:00 ~ 16:00 (660 ~ 960분)
-    const lunchAllowed = totalMinutes >= 11 * 60 && totalMinutes <= 16 * 60;
-    // const lunchAllowed = true;
+    // 아침: 06:30 ~ 10:29 (390 ~ 629분)
+    const breakfastAllowed = totalMinutes >= 6 * 60 + 30 && totalMinutes <= 10 * 60 + 29;
+    // 점심: 10:30 ~ 16:29 (630 ~ 989분)
+    const lunchAllowed = totalMinutes >= 10 * 60 + 30 && totalMinutes <= 16 * 60 + 29;
+    // 저녁: 16:30 ~ 06:29 (990 ~ 1439 또는 0 ~ 389)
+    const dinnerAllowed = totalMinutes >= 16 * 60 + 30 || totalMinutes <= 6 * 60 + 29;
 
-    
-    // 저녁: 17:00 ~ 05:59 (1020 ~ 1439분, 또는 0 ~ 359분)
-    const dinnerAllowed = totalMinutes >= 17 * 60 || totalMinutes <= 5 * 60 + 59;
-    // const dinnerAllowed = true;
-
-    
     return {
       breakfast: !breakfastAllowed,
       lunch: !lunchAllowed,
@@ -128,8 +130,8 @@ const Main = () => {
 
   // 현재 시간 카테고리 (메모이제이션)
   const currentTimeCategory = useMemo(() => {
-    return getTimeCategory(currentTime.hour);
-  }, [currentTime.hour]);
+    return getTimeCategory(currentTime.totalMinutes);
+  }, [currentTime.totalMinutes]);
 
   // 자동 모달 표시를 위한 useEffect
   useEffect(() => {
@@ -238,6 +240,11 @@ const Main = () => {
 
   // 단식 스위치 핸들러 (최적화)
   const handleFastingToggle = useCallback(async (mealType, checked) => {
+    // 요구사항 2: 식사 시간대에만 단식 설정 가능
+    if (timeRestrictions[mealType]) {
+      message.warning(`현재 시간에는 ${mealType === 'breakfast' ? '아침' : mealType === 'lunch' ? '점심' : '저녁'} 단식 설정이 불가능합니다.\n기록 가능 시간: ${TIME_RESTRICTIONS[mealType].label}`);
+      return;
+    }
     const newFlag = checked ? 2 : 0;
     const previousFlag = mealFlags[mealType];
     
@@ -258,11 +265,11 @@ const Main = () => {
   const getTimeRestrictionMessage = (mealType) => {
     switch (mealType) {
       case 'breakfast':
-        return '06시30분부터 10시까지만 기록 가능';
+        return '06시30분부터 10시30분까지만 기록 가능';
       case 'lunch':
-        return '11시부터 16시까지만 기록 가능';
+        return '10시30분부터 16시30분까지만 기록 가능';
       case 'dinner':
-        return '17시부터 05시59분까지만 기록 가능';
+        return '16시30분부터 다음날 06시29분까지만 기록 가능';
       default:
         return '';
     }
@@ -378,13 +385,14 @@ const Main = () => {
                 cursor: 'pointer',
                 padding: '8px',
                 background: isModalAvailable ? '#f0fff7' : '#f5f5f5',
-                borderRadius: '50%',
+                borderRadius: '4%',
                 display: 'flex',
                 justifyContent: 'center',
                 alignItems: 'center'
               }}
             >
-              <HistoryOutlined style={{ fontSize: '24px', color: isModalAvailable ? '#5FDD9D' : '#999' }} />
+              <HistoryOutlined style={{ fontSize: '20px', color: isModalAvailable ? '#5FDD9D' : '#999' }} />
+              <Text style={{ fontSize: '16px', fontFamily: 'Pretendard-500', marginLeft: '8px' }}>기록 확인하기</Text>
               {isModalAvailable && (
                 <div style={{
                   position: 'absolute',
@@ -436,7 +444,7 @@ const Main = () => {
                     <FastingSwitch 
                       isFasting={isFasting}
                       onChange={(checked) => handleFastingToggle(config.type, checked)}
-                      disabled={isCompleted || hasSnackData}
+                      disabled={isCompleted || hasSnackData || isRestricted}
                     />
                   </Col>
                 </Row>

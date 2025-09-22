@@ -143,8 +143,6 @@ const SurveyResultsPage = () => {
       '체중 조절 동기 (1-7)',
       '금지 음식 행동 (1-4)',
       '음식 의식 정도 (1-7)',
-      '적게 섭취한 반응',
-      '추가 설명',
       '그룹 적용 여부',
       '제출일시'
     ];
@@ -156,8 +154,6 @@ const SurveyResultsPage = () => {
       response.q3_weight_control_motivation || '',
       response.q4_forbidden_food_behavior || '',
       response.q5_food_consciousness || '',
-      response.q6_less_intake_reaction || '',
-      response.q6_follow_up || '',
       response.is_group ? '예' : '아니오',
       response.timestamp || ''
     ]);
@@ -222,22 +218,7 @@ const SurveyResultsPage = () => {
       width: 80,
       align: 'center',
     },
-    {
-      title: 'Q6 : 반응',
-      dataIndex: 'q6_less_intake_reaction',
-      key: 'q6_less_intake_reaction',
-      width: 100,
-      align: 'center',
-      ellipsis: true,
-    },
-    {
-        title: 'Q6: 추가 서술',
-        dataIndex: 'q6_follow_up',
-        key: 'q6_follow_up',
-        width: 100,
-        align: 'center',
-        ellipsis: true,
-    },
+    // Q6 관련 컬럼 제거
     {
       title: '그룹 편차 적용 여부',
       dataIndex: 'is_group',

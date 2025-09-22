@@ -14,31 +14,14 @@ const SurveyPage = () => {
   const { foodData } = useFood();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
-  const [q6ScaleValue, setQ6ScaleValue] = useState(null);
-  const [q6SimpleValue, setQ6SimpleValue] = useState(null);
-  const [showQ6Follow, setShowQ6Follow] = useState(false);
   const [lunchCalorieDifference, setLunchCalorieDifference] = useState(null);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [checkingSubmission, setCheckingSubmission] = useState(true);
   const [isGroupApplied, setIsGroupApplied] = useState(false);
 
-  // 점심 칼로리 편차 확인 - applied 값이 음수일 때만 6번 문항 표시
+  // 점심 칼로리 편차 확인 제거 (Q6 폐지)
   useEffect(() => {
-    if (foodData && foodData.lunch && foodData.lunch.calorieDeviation) {
-      const applied = foodData.lunch.calorieDeviation.applied;
-      if (applied < 0) {
-        setLunchCalorieDifference(Math.abs(applied));
-      } else {
-        setLunchCalorieDifference(0);
-      }
-      
-      // 그룹 편차 적용 여부 확인
-      const groupSettings = foodData.lunch.calorieDeviation.groupSettings;
-      setIsGroupApplied(!!groupSettings && Object.keys(groupSettings).length > 0);
-    } else {
-      setLunchCalorieDifference(0);
-      setIsGroupApplied(false);
-    }
+    setLunchCalorieDifference(0);
   }, [foodData]);
 
   // 오늘 설문 제출 여부 확인
@@ -89,31 +72,7 @@ const SurveyPage = () => {
     }
   }, [email, isAuthenticated, navigate]);
 
-  // Q6 답변 변경 시 추가 질문 표시 여부 결정
-  const handleQ6Change = (value, type) => {
-    
-    if (type === 'scale') {
-      setQ6ScaleValue(value);
-      setQ6SimpleValue(null);
-      // Form에 값 설정
-      form.setFieldsValue({ q6_less_intake_reaction: value });
-    } else if (type === 'simple') {
-      setQ6SimpleValue(value);
-      setQ6ScaleValue(null);
-      // Form에 값 설정
-      form.setFieldsValue({ q6_less_intake_reaction: value });
-    }
-    
-    // 추가 질문 표시 여부: 척도 3점 이하 또는 '아니오' 선택 시
-    setShowQ6Follow(value === 'no' || (typeof value === 'number' && value <= 3));
-    
-    // Form 검증 트리거
-    form.validateFields(['q6_less_intake_reaction']);
-  };
-
-  // Q6 상태 변경 시 강제 리렌더링
-  useEffect(() => {
-  }, [q6ScaleValue, q6SimpleValue]);
+  // Q6 관련 로직 제거
 
   // 설문 제출 처리
   const handleSubmit = async (values) => {
@@ -142,8 +101,6 @@ const SurveyPage = () => {
         q3_weight_control_motivation: values.q3_weight_control_motivation,
         q4_forbidden_food_behavior: values.q4_forbidden_food_behavior,
         q5_food_consciousness: values.q5_food_consciousness,
-        q6_less_intake_reaction: lunchCalorieDifference > 0 ? values.q6_less_intake_reaction : null,
-        q6_follow_up: (lunchCalorieDifference > 0 && showQ6Follow) ? values.q6_follow_up : null,
         is_group: isGroupApplied,
         submittedAt: serverTimestamp(),
         timestamp: new Date().toISOString()
@@ -452,120 +409,7 @@ const SurveyPage = () => {
             </div>
           </Card>
 
-          {/* Q6: 예상보다 적게 섭취한 것에 대한 반응 - 조건부 표시 */}
-          {lunchCalorieDifference > 0 && (
-          <Card className="bg-white rounded-xl shadow-sm border-0 overflow-hidden">
-            <div className="p-2 sm:p-5">
-              <div className="flex items-center mb-3">
-                <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center mr-1">
-                  <span className="text-indigo-600 font-semibold text-sm">6</span>
-                </div>
-                <h3 className="text-base sm:text-lg font-semibold text-gray-800">
-                  번 질문
-                </h3>
-              </div>
-              <p className="text-sm sm:text-base text-gray-600 mb-6 pl-4">
-                오늘 점심에 예상보다 <span className="font-bold text-md text-blue-600 bg-blue-50 px-2 py-1 rounded-md">{lunchCalorieDifference}</span> 칼로리를<br/> 적게 섭취하였습니다.
-                <br/>이 사실이 얼마나 놀라웠나요?
-              </p>
-              <div className="space-y-6">
-                {/* 7점 척도 */}
-                <div>
-                  <div className="bg-gray-50 p-3 sm:p-2 rounded-lg">
-                    <LikertScale
-                      key={`scale-${q6ScaleValue || 'none'}-simple-${q6SimpleValue || 'none'}`}
-                      value={q6ScaleValue}
-                      onChange={(value) => handleQ6Change(value, 'scale')}
-                      options={[
-                        '전혀 놀랍지 않음',
-                        '2',
-                        '3',
-                        '4',
-                        '5',
-                        '6',
-                        '많이 놀라움'
-                      ]}
-                      name="q6_scale"
-                    />
-                  </div>
-                </div>
-                
-                {/* 또는 예/아니오 */}
-                <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-3">
-                    또는 간단히 선택해주세요
-                  </h4>
-                  <Radio.Group 
-                    key={`simple-${q6SimpleValue || 'none'}-scale-${q6ScaleValue || 'none'}`}
-                    value={q6SimpleValue}
-                    onChange={(value) => handleQ6Change(value, 'simple')}
-                    className="w-full"
-                  >
-                    <div className="grid grid-cols-2 gap-3">
-                      <label className="flex items-center p-3 sm:p-2 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 transition-colors">
-                        <Radio value="yes" className="mr-3" />
-                        <span className="text-sm sm:text-base text-gray-700 font-medium">예</span>
-                      </label>
-                      <label className="flex items-center p-3 sm:p-2 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 transition-colors">
-                        <Radio value="no" className="mr-3" />
-                        <span className="text-sm sm:text-base text-gray-700 font-medium">아니오</span>
-                      </label>
-                    </div>
-                  </Radio.Group>
-                </div>
-              </div>
-              
-              {/* 숨겨진 Form.Item으로 검증 처리 */}
-              <Form.Item
-                name="q6_less_intake_reaction"
-                rules={[
-                  {
-                    validator: () => {
-                      if (lunchCalorieDifference > 0 && !q6ScaleValue && !q6SimpleValue) {
-                        return Promise.reject(new Error('선택해 주세요'));
-                      }
-                      return Promise.resolve();
-                    }
-                  }
-                ]}
-                style={{ display: 'none' }}
-              >
-                <input type="hidden" />
-              </Form.Item>
-            </div>
-          </Card>
-          )}
-
-          {/* Q6 추가 질문 (조건부 노출) */}
-          {lunchCalorieDifference > 0 && showQ6Follow && (
-            <Card className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl shadow-sm border border-yellow-200 overflow-hidden">
-              <div className="p-2 sm:p-5">
-                <div className="flex items-center mb-3">
-                  <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center mr-3">
-                    <span className="text-yellow-600 font-semibold text-sm">💭</span>
-                  </div>
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-800">
-                    추가 질문
-                  </h3>
-                </div>
-                <p className="text-sm sm:text-base text-gray-600 mb-3">
-                  칼로리를 예상보다 적게 섭취한 것이 왜 횡재처럼 느껴지지 않았는지 설명해주시면 감사하겠습니다
-                </p>
-                <Form.Item
-                  name="q6_follow_up"
-                  rules={[{ required: true, message: '설명을 입력해 주세요' }]}
-                >
-                  <TextArea
-                    placeholder="자유롭게 설명해 주세요..."
-                    rows={4}
-                    maxLength={500}
-                    showCount
-                    className="text-sm sm:text-base p-3 sm:p-2 rounded-lg border-2 border-gray-200 focus:border-yellow-400 transition-colors resize-none"
-                  />
-                </Form.Item>
-              </div>
-            </Card>
-          )}
+          {/* Q6 관련 항목 제거됨 */}
         </Form>
       </div>
 

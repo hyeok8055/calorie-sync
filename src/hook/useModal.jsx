@@ -125,7 +125,7 @@ export const useModal = (testMode = false) => {
     if (beta >= -threshold && beta <= threshold) {
       // 1. 정확 (±20% 이내)
       feedbackCase = 'accurate';
-      messageText = '완벽해요! 예측과 거의 일치합니다';
+      messageText = '예측과 거의 같아요';
       messageColor = '#888';
       backgroundColor = '#f8f8f8';
       calorieTextColor = '#888';
@@ -134,7 +134,7 @@ export const useModal = (testMode = false) => {
       feedbackCase = 'less';
       messageText = (
         <span>
-          실제 섭취량이 예상보다 <span style={{ color: '#ff4d4f' }}>-{Math.abs(beta).toFixed(0)}kcal</span> 적네요.
+          예측보다 <span style={{ color: '#ff4d4f' }}>-{Math.abs(beta).toFixed(0)}kcal</span> 덜 먹었어요.
         </span>
       );
       messageColor = '#333'; // 검은색
@@ -145,7 +145,7 @@ export const useModal = (testMode = false) => {
       feedbackCase = 'more';
       messageText = (
         <span>
-          실제 섭취량이 예상보다 <span style={{ color: '#1677ff' }}>+{beta.toFixed(0)}kcal</span> 많네요.
+          예측보다 <span style={{ color: '#1677ff' }}>+{beta.toFixed(0)}kcal</span> 더 먹었어요.
         </span>
       );
       messageColor = '#333'; // 검은색
@@ -176,34 +176,36 @@ export const useModal = (testMode = false) => {
             {messageText}
           </Text>
           
-          {/* 편차 표시 패널 */}
-          <div style={{
-            backgroundColor: backgroundColor,
-            borderRadius: '10px',
-            padding: '15px 20px',
-            width: '90%',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            boxShadow: feedbackCase !== 'accurate' ? `0 2px 8px ${calorieTextColor}20` : 'none'
-          }}>
-            <Text 
-              style={{ 
-                fontSize: '24px', 
-                fontWeight: '700', 
-                color: calorieTextColor,
-                display: 'flex',
-                alignItems: 'center'
-              }}
-            >
-              {feedbackCase === 'accurate' ? null : isPositive ? (
-                <ArrowUpOutlined style={{ marginRight: '8px', fontSize: '22px' }} />
-              ) : (
-                <ArrowDownOutlined style={{ marginRight: '8px', fontSize: '22px' }} />
-              )}
-              {feedbackCase === 'accurate' ? '±' : isPositive ? '+' : '-'}{absValue}kcal
-            </Text>
-          </div>
+          {/* 편차 표시 패널: 정확 케이스에서는 숨김 */}
+          {feedbackCase !== 'accurate' && (
+            <div style={{
+              backgroundColor: backgroundColor,
+              borderRadius: '10px',
+              padding: '15px 20px',
+              width: '90%',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              boxShadow: `0 2px 8px ${calorieTextColor}20`
+            }}>
+              <Text 
+                style={{ 
+                  fontSize: '24px', 
+                  fontWeight: '700', 
+                  color: calorieTextColor,
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+              >
+                {isPositive ? (
+                  <ArrowUpOutlined style={{ marginRight: '8px', fontSize: '22px' }} />
+                ) : (
+                  <ArrowDownOutlined style={{ marginRight: '8px', fontSize: '22px' }} />
+                )}
+                {isPositive ? '+' : '-'}{absValue}kcal
+              </Text>
+            </div>
+          )}
         </div>
       </>
     );
@@ -232,16 +234,18 @@ export const useModal = (testMode = false) => {
   const checkAutoModalAvailable = useCallback(() => {
     if (testMode || !foodData) return { available: false, mealType: null };
 
-    const now = new Date();
-    const hours = now.getHours();
+  const now = new Date();
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  const totalMinutes = hours * 60 + minutes;
 
     // 현재 시간에 따라 조회 가능한 식사 타입 결정
     let allowedMealType = null;
-    if (hours >= 6 && hours <= 10) {
+    if (totalMinutes >= (6 * 60 + 30) && totalMinutes <= (10 * 60 + 0)) {
       allowedMealType = 'dinner';  // 전날 저녁 식사 결과
-    } else if (hours >= 11 && hours <= 14) {
+    } else if (totalMinutes >= (10 * 60 + 30) && totalMinutes <= (14 * 60 + 0)) {
       allowedMealType = 'breakfast';  // 아침 식사 결과
-    } else if (hours >= 17 && hours <= 20) {
+    } else if (totalMinutes >= (16 * 60 + 30) && totalMinutes <= (20 * 60 + 0)) {
       allowedMealType = 'lunch';  // 점심 식사 결과
     }
 
@@ -258,8 +262,8 @@ export const useModal = (testMode = false) => {
       
       // 저녁 식사는 다음 날 아침에만 조회 가능하도록 제한
       if (allowedMealType === 'dinner') {
-        // 저녁 식사는 다음 날 아침(6시-10시)에만 조회 가능
-        if (hasData && notViewed && hours >= 6 && hours <= 10) {
+        // 저녁 식사는 다음 날 아침(06:30-10:30)에만 조회 가능
+        if (hasData && notViewed && totalMinutes >= (6 * 60 + 30) && totalMinutes <= (10 * 60 + 0)) {
           return { available: true, mealType: allowedMealType };
         }
       } else if (hasData && notViewed) {
@@ -284,12 +288,12 @@ export const useModal = (testMode = false) => {
       
       // 각 식사별로 조회 가능한 시간이 지났는지 확인
       let canViewThisMeal = false;
-      if (mealType === 'breakfast' && hours >= 11) {
-        canViewThisMeal = true; // 아침식사는 11시 이후부터 조회 가능
-      } else if (mealType === 'lunch' && hours >= 17) {
-        canViewThisMeal = true; // 점심식사는 17시 이후부터 조회 가능
-      } else if (mealType === 'dinner' && hours >= 6 && hours <= 10) {
-        // 저녁식사는 다음날 아침 6시부터 10시까지만 조회 가능
+      if (mealType === 'breakfast' && totalMinutes >= (10 * 60 + 30)) {
+        canViewThisMeal = true; // 아침식사는 10:30 이후부터 조회 가능
+      } else if (mealType === 'lunch' && totalMinutes >= (16 * 60 + 30)) {
+        canViewThisMeal = true; // 점심식사는 16:30 이후부터 조회 가능
+      } else if (mealType === 'dinner' && totalMinutes >= (6 * 60 + 30) && totalMinutes <= (10 * 60 + 0)) {
+        // 저녁식사는 다음날 아침 06:30~10:30에 조회 가능
         canViewThisMeal = true;
       }
       
@@ -305,17 +309,19 @@ export const useModal = (testMode = false) => {
   const checkModalAvailable = useCallback(() => {
     if (testMode) return { available: true, mealType: 'lunch' };
 
-    const now = new Date();
-    const hours = now.getHours();
+  const now = new Date();
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  const totalMinutes = hours * 60 + minutes;
 
     let mealType = null;
 
     // 새로운 시간 기준으로 수정
-    if (hours >= 6 && hours <= 10) {
+    if (totalMinutes >= (6 * 60 + 30) && totalMinutes <= (10 * 60 + 0)) {
       mealType = 'dinner';  // 전날 저녁 식사 결과
-    } else if (hours >= 11 && hours <= 14) {
+    } else if (totalMinutes >= (10 * 60 + 30) && totalMinutes <= (14 * 60 + 0)) {
       mealType = 'breakfast';  // 아침 식사 결과
-    } else if (hours >= 17 && hours <= 20) {
+    } else if (totalMinutes >= (16 * 60 + 30) && totalMinutes <= (20 * 60 + 0)) {
       mealType = 'lunch';  // 점심 식사 결과
     }
 
@@ -348,8 +354,10 @@ export const useModal = (testMode = false) => {
       showCalorieDifferenceModal(mealType);
     } else {
       // 조회 가능한 시간이 아니거나 식사 기록이 없는 경우
-      const now = new Date();
-      const hours = now.getHours();
+  const now = new Date();
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  const totalMinutes = hours * 60 + minutes;
       
       let message = '';
       
@@ -381,11 +389,11 @@ export const useModal = (testMode = false) => {
           lineHeight: 1.5 
         };
         
-        if (hours >= 6 && hours <= 10) {
+        if (totalMinutes >= (6 * 60 + 30) && totalMinutes <= (10 * 60 + 0)) {
           message = <Text style={messageStyle}>어제 저녁 식사 기록이 없습니다.</Text>;
-        } else if (hours >= 11 && hours <= 14) {
+        } else if (totalMinutes >= (10 * 60 + 30) && totalMinutes <= (14 * 60 + 0)) {
           message = <Text style={messageStyle}>아침 식사 기록이 없습니다.</Text>;
-        } else if (hours >= 17 && hours <= 20) {
+        } else if (totalMinutes >= (16 * 60 + 30) && totalMinutes <= (20 * 60 + 0)) {
           message = <Text style={messageStyle}>점심 식사 기록이 없습니다.</Text>;
         }
       }
