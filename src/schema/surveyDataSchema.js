@@ -603,8 +603,8 @@ export const validateSurveyResponse = (response, template) => {
     return errors;
   }
   
-  if (!response.uid || typeof response.uid !== 'string') {
-    errors.push('사용자 ID가 필요합니다.');
+  if (!response.userEmail || typeof response.userEmail !== 'string') {
+    errors.push('사용자 이메일이 필요합니다.');
   }
   
   if (!response.surveyId || typeof response.surveyId !== 'string') {

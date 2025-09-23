@@ -99,7 +99,7 @@ const ConditionalHeaderFooter = () => {
       navigate('/googlelogin', { replace: true });
       setTimeout(() => setIsNavigating(false), 100);
     }
-  }, [isAuthenticated, user?.setupCompleted, user?.uid, location.pathname, navigate, isNavigating]);
+  }, [isAuthenticated, user?.setupCompleted, user?.email, location.pathname, navigate, isNavigating]);
 
   const hiddenRoutes = ['/googlelogin', '/intro'];
   const shouldHideHeaderFooter = hiddenRoutes.includes(location.pathname);
@@ -134,7 +134,7 @@ const App = () => {
   const { checkGlobalSurveyStatus, markSurveyCompleted } = useSurvey();
   const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
   const surveyState = useSelector((state) => state.survey);
-  const uid = useSelector((state) => state.auth.user?.uid);
+  const email = useSelector((state) => state.auth.user?.email);
 
   // 포그라운드 메시지 핸들러 초기화
   useEffect(() => {
@@ -146,11 +146,11 @@ const App = () => {
 
   // 설문조사 상태 확인
   useEffect(() => {
-    if (isAuthenticated && uid) {
+    if (isAuthenticated && email) {
       // 전역 설문조사 상태 확인 (사용자 완료 상태도 함께 확인됨)
       checkGlobalSurveyStatus();
     }
-  }, [isAuthenticated, uid, checkGlobalSurveyStatus]);
+  }, [isAuthenticated, email, checkGlobalSurveyStatus]);
 
   // 설문조사 모달 표시 여부 결정
   const shouldShowSurveyModal = isAuthenticated && 

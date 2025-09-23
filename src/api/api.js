@@ -30,10 +30,10 @@ export const searchFoodNutrition = async (keyword) => {
 // Meal Flag 관련 API 함수들
 
 // 오늘의 meal flag 데이터 가져오기 (foods 컬렉션에서)
-export const getMealFlags = async (uid) => {
+export const getMealFlags = async (email) => {
   try {
     const today = getTodayDate();
-    const docRef = doc(db, 'users', uid, 'foods', today);
+    const docRef = doc(db, 'users', email, 'foods', today);
     const docSnap = await getDoc(docRef);
     
     if (docSnap.exists()) {
@@ -60,12 +60,12 @@ export const getMealFlags = async (uid) => {
 };
 
 // 특정 meal의 flag 업데이트 (foods 컬렉션만 사용)
-export const updateMealFlag = async (uid, mealType, flag) => {
+export const updateMealFlag = async (email, mealType, flag) => {
   try {
     const today = getTodayDate();
     
     // foods 컬렉션에서 flag 업데이트
-    const foodsDocRef = doc(db, 'users', uid, 'foods', today);
+    const foodsDocRef = doc(db, 'users', email, 'foods', today);
     const foodsDocSnap = await getDoc(foodsDocRef);
     
     if (foodsDocSnap.exists()) {
@@ -99,10 +99,10 @@ export const updateMealFlag = async (uid, mealType, flag) => {
 };
 
 // 모든 meal flag 한번에 업데이트 (foods 컬렉션만 사용)
-export const updateAllMealFlags = async (uid, mealFlags) => {
+export const updateAllMealFlags = async (email, mealFlags) => {
   try {
     const today = getTodayDate();
-    const docRef = doc(db, 'users', uid, 'foods', today);
+    const docRef = doc(db, 'users', email, 'foods', today);
     
     const updateData = {};
     Object.keys(mealFlags).forEach(mealType => {

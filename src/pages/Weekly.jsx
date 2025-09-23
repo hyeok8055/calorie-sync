@@ -12,7 +12,7 @@ import dayjs from 'dayjs';
 const { Text } = Typography;
 
 const Weekly = () => {
-  const uid = useSelector((state) => state.auth.user?.uid);
+  const email = useSelector((state) => state.auth.user?.email);
   const [recommendedDailyCalories, setRecommendedDailyCalories] = useState(null);
   const [loading, setLoading] = useState(false);
   const [weeklyStats, setWeeklyStats] = useState({
@@ -35,7 +35,7 @@ const Weekly = () => {
     if (!todayFoodsData) return;
     
     const today = dayjs().format('YYYY-MM-DD');
-    const todayWeeklyRef = doc(db, 'users', uid, 'weekly', today);
+    const todayWeeklyRef = doc(db, 'users', email, 'weekly', today);
     
     // 총 칼로리 계산
     const totalCalories = [
@@ -75,12 +75,12 @@ const Weekly = () => {
 
   useEffect(() => {
     const fetchUserData = async () => {
-      if (!uid) return;
+      if (!email) return;
       setLoading(true);
 
       try {
         // 사용자 기본 정보 가져오기
-        const userDoc = await getDoc(doc(db, 'users', uid));
+        const userDoc = await getDoc(doc(db, 'users', email));
         if (!userDoc.exists()) {
           // console.log('No user data found');
           return;
@@ -90,7 +90,7 @@ const Weekly = () => {
 
         // 최신 체중 데이터 가져오기
         const fitnessQuery = query(
-          collection(db, 'users', uid, 'fitness'),
+          collection(db, 'users', email, 'fitness'),
           orderBy('date', 'desc'),
           limit(1)
         );
@@ -106,11 +106,11 @@ const Weekly = () => {
 
         // 오늘 날짜의 weekly 문서 확인
         const today = dayjs().format('YYYY-MM-DD');
-        const todayWeeklyRef = doc(db, 'users', uid, 'weekly', today);
+        const todayWeeklyRef = doc(db, 'users', email, 'weekly', today);
         const todayWeeklyDoc = await getDoc(todayWeeklyRef);
 
         // 오늘의 foods 데이터 가져오기
-        const todayFoodsRef = doc(db, 'users', uid, 'foods', today);
+        const todayFoodsRef = doc(db, 'users', email, 'foods', today);
         const todayFoodsDoc = await getDoc(todayFoodsRef);
         const todayFoodsData = todayFoodsDoc.exists() ? todayFoodsDoc.data() : null;
 
@@ -126,7 +126,7 @@ const Weekly = () => {
         
         for (let i = 0; i < 7; i++) {
           const currentDate = startOfWeek.add(i, 'day').format('YYYY-MM-DD');
-          const weeklyDocRef = doc(db, 'users', uid, 'weekly', currentDate);
+          const weeklyDocRef = doc(db, 'users', email, 'weekly', currentDate);
           const weeklyDoc = await getDoc(weeklyDocRef);
           
           if (weeklyDoc.exists()) {
@@ -163,7 +163,7 @@ const Weekly = () => {
     };
 
     fetchUserData();
-  }, [uid]);
+  }, [email]);
 
   const getBarChartData = () => {
     return weeklyStats.dailyData.map(day => ({

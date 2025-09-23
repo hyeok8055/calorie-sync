@@ -12,7 +12,7 @@ const BMICalculator = ({ weight: parentWeight }) => {
   const [height, setHeight] = useState(undefined);
   const [weight, setWeight] = useState(parentWeight);
   const [bmi, setBMI] = useState(undefined);
-	const uid = useSelector((state) => state.auth.user?.uid);
+	const email = useSelector((state) => state.auth.user?.email);
   const [loading, setLoading] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [inputHeight, setInputHeight] = useState(undefined);
@@ -20,10 +20,10 @@ const BMICalculator = ({ weight: parentWeight }) => {
 
   useEffect(() => {
     const fetchUserData = async () => {
-      if (!uid) return;
+      if (!email) return;
       setLoading(true);
       try {
-        const userDoc = await getDoc(doc(db, 'users', uid));
+        const userDoc = await getDoc(doc(db, 'users', email));
         let fetchedWeight = undefined;
         if (userDoc.exists()) {
           const userData = userDoc.data();
@@ -31,7 +31,7 @@ const BMICalculator = ({ weight: parentWeight }) => {
 
           // fitness 데이터 있는지 확인
           const fitnessQuery = query(
-            collection(db, 'users', uid, 'fitness'),
+            collection(db, 'users', email, 'fitness'),
             orderBy('date', 'desc'),
             limit(1)
           );
@@ -63,7 +63,7 @@ const BMICalculator = ({ weight: parentWeight }) => {
     };
 
 		fetchUserData();
-  }, [uid, parentWeight]);
+  }, [email, parentWeight]);
 
   useEffect(() => {
     calculateBMI(height, weight);
@@ -77,14 +77,14 @@ const BMICalculator = ({ weight: parentWeight }) => {
   };
 
   const handleInputChange = async (value) => {
-    if (!uid) return;
+    if (!email) return;
     setInputHeight(value);
   };
 
   const handleSaveHeight = async () => {
-    if (!uid || !inputHeight) return;
+    if (!email || !inputHeight) return;
     try {
-      await setDoc(doc(db, 'users', uid), {
+      await setDoc(doc(db, 'users', email), {
         height: inputHeight,
       }, { merge: true });
       setHeight(inputHeight);
