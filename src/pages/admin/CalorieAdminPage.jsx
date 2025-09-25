@@ -96,7 +96,8 @@ const CalorieAdminPage = () => {
     applyDeviation,
     updateUserCalorieDeviation,
     updateGroupCalorieDeviation,
-    getAppliedDeviation
+    getAppliedDeviation,
+    savePersonalCalorieBias
   } = useCalorieDeviation(getCurrentGroupDeviationSettings());
   
   // useFood 훅에서 applyGroupDeviation 가져오기
@@ -1192,6 +1193,16 @@ const CalorieAdminPage = () => {
         [selectedMealType]: updatedMealData,
         updatedAt: new Date().toISOString()
       });
+
+      // 단발성 개인 편차 사용 후 0으로 리셋 (관리자 적용에서도 동일)
+      if (personalBias !== 0) {
+        try {
+          await savePersonalCalorieBias(userEmail, 0);
+        } catch (resetError) {
+          console.error('개인 편차 리셋 실패:', resetError);
+          // 리셋 실패해도 편차 적용은 성공했으므로 에러로 처리하지 않음
+        }
+      }
       
       message.success(`${userInfo.name || userInfo.email}의 ${dateString} ${mealTypeKoreanMap[selectedMealType]} 편차 적용 완료 (${appliedDeviation > 0 ? '+' : ''}${appliedDeviation} kcal)`);
       await loadData(); // 데이터 리로드
@@ -1347,6 +1358,16 @@ const CalorieAdminPage = () => {
             [selectedMealType]: updatedMealData,
             updatedAt: new Date().toISOString()
           });
+
+          // 단발성 개인 편차 사용 후 0으로 리셋 (그룹 적용에서도 동일)
+          if (personalBias !== 0) {
+            try {
+              await savePersonalCalorieBias(userEmail, 0);
+            } catch (resetError) {
+              console.error(`사용자 ${userEmail} 편차 리셋 실패:`, resetError);
+              // 리셋 실패해도 편차 적용은 성공했으므로 에러 카운트 증가하지 않음
+            }
+          }
           
           successCount++;
         } catch (userError) {

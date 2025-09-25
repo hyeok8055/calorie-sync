@@ -76,7 +76,8 @@ export const useFood = () => {
     getDeviationSettings, 
     getPersonalCalorieBias, 
     getGroupDeviationSettings, 
-    getUserGroupId
+    getUserGroupId,
+    savePersonalCalorieBias
   } = useCalorieDeviation();
 
   useEffect(() => {
@@ -429,6 +430,16 @@ export const useFood = () => {
         if (flag === 1) {
           const targetMealType = mealType === 'snacks' ? getSnackMealType() : mealType;
           dispatch(updateMealFlag(targetMealType, 1));
+        }
+
+        // 단발성 개인 편차 사용 후 0으로 리셋 (저장 성공 시에만)
+        if (personalBias !== 0) {
+          try {
+            await savePersonalCalorieBias(email, 0);
+          } catch (resetError) {
+            console.error('개인 편차 리셋 실패:', resetError);
+            // 리셋 실패해도 저장은 성공했으므로 에러로 처리하지 않음
+          }
         }
       } catch (err) {
         console.error('저장 중 에러 발생:', err);
