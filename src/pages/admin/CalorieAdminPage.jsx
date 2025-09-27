@@ -923,13 +923,22 @@ const CalorieAdminPage = () => {
       dataIndex: 'group',
       key: 'group',
       width: 120,
-      render: (groupValue) => {
-        if (groupValue === DEFAULT_GROUP_VALUE) {
+      render: (groupValue, record) => {
+        // 선택된 날짜에 적용되는 그룹 찾기
+        const applicableGroup = groups.find(g => {
+          if (g.isDefault) return false;
+          if (!g.applicableDate) return false;
+          const groupDate = dayjs(g.applicableDate.toDate()).format('YYYY-MM-DD');
+          const selectedDateStr = selectedDate.format('YYYY-MM-DD');
+          return groupDate === selectedDateStr && record.group === g.name;
+        });
+
+        if (applicableGroup) {
+          return <Tag color={applicableGroup.color || 'default'}>{applicableGroup.name}</Tag>;
+        } else {
+          // 적용되는 그룹이 없으면 기본 그룹 표시
           const defaultGroup = groups.find(g => g.id === DEFAULT_GROUP_ID);
           return <Tag color={defaultGroup?.color || '#8c8c8c'}>{defaultGroup?.name || '기본 그룹'}</Tag>;
-        } else {
-          const group = groups.find(g => g.name === groupValue);
-          return <Tag color={group?.color || 'default'}>{group?.name || groupValue}</Tag>;
         }
       },
       filters: [
@@ -957,6 +966,71 @@ const CalorieAdminPage = () => {
         </Text>
       ),
       sorter: (a, b) => a.calorieBias - b.calorieBias,
+    },
+    {
+      title: '예측성공여부',
+      key: 'predictionAccuracy',
+      width: 120,
+      render: (_, record) => {
+        const foodData = record.foodDocForSelectedDate;
+        const mealData = foodData ? foodData[selectedMealType] : null;
+        
+        if (!mealData) {
+          return <Text type="secondary">-</Text>;
+        }
+        
+        // 데이터 추출 로직 (기존과 동일)
+        let estimatedCalories = null;
+        let actualCalories = null;
+        let appliedDeviation = null;
+        
+        if (mealData) {
+          // 새로운 데이터 구조 (originalCalories 사용)
+          if (mealData.originalCalories) {
+            estimatedCalories = mealData.originalCalories.estimated;
+            actualCalories = mealData.originalCalories.actual;
+            appliedDeviation = mealData.calorieDeviation?.applied || mealData.offset || 0;
+          } 
+          // 기존 데이터 구조 (estimatedCalories, actualCalories 직접 사용)
+          else {
+            estimatedCalories = mealData.estimatedCalories;
+            actualCalories = mealData.actualCalories;
+            appliedDeviation = mealData.offset || 0;
+          }
+        }
+        
+        if (estimatedCalories === null || actualCalories === null) {
+          return <Text type="secondary">-</Text>;
+        }
+        
+        // 차이 계산 (appliedDeviation 우선 사용)
+        const difference = appliedDeviation ?? (actualCalories - estimatedCalories);
+        const threshold = 0.2 * actualCalories;
+        
+        let status = '';
+        let color = '';
+        let icon = '';
+        
+        if (difference >= -threshold && difference <= threshold) {
+          status = '정확';
+          color = '#52c41a'; // 초록색
+          icon = '✓';
+        } else if (difference < -threshold) {
+          status = '적게';
+          color = '#ff4d4f'; // 빨간색
+          icon = '↓';
+        } else {
+          status = '많이';
+          color = '#1677ff'; // 파란색
+          icon = '↑';
+        }
+        
+        return (
+          <Tag color={color} style={{ color: 'white' }}>
+            {icon} {status}
+          </Tag>
+        );
+      }
     },
     {
       title: `${selectedDate.format('MM/DD')} ${mealTypeKoreanMap[selectedMealType] || selectedMealType} 정보`,
@@ -1002,6 +1076,21 @@ const CalorieAdminPage = () => {
                 </Space>
              </Space>
         );
+      },
+      sorter: (a, b) => {
+        const aData = a.foodDocForSelectedDate?.[selectedMealType];
+        const bData = b.foodDocForSelectedDate?.[selectedMealType];
+        
+        const aHasData = aData && 
+          ((aData.originalCalories?.actual !== undefined && aData.originalCalories?.estimated !== undefined) ||
+           (aData.estimatedCalories !== undefined && aData.actualCalories !== undefined));
+        const bHasData = bData && 
+          ((bData.originalCalories?.actual !== undefined && bData.originalCalories?.estimated !== undefined) ||
+           (bData.estimatedCalories !== undefined && bData.actualCalories !== undefined));
+        
+        if (aHasData && !bHasData) return -1;
+        if (!aHasData && bHasData) return 1;
+        return 0;
       }
     },
     {
@@ -1039,14 +1128,23 @@ const CalorieAdminPage = () => {
       render: (_, r) => {
           let groupName = '정보 없음';
           let groupColor = 'default';
-          if (r.group === DEFAULT_GROUP_VALUE) {
-              const defaultGroup = groups.find(g => g.id === DEFAULT_GROUP_ID);
-              groupName = defaultGroup?.name || '기본 그룹';
-              groupColor = defaultGroup?.color || '#8c8c8c';
+
+          // 선택된 날짜에 적용되는 그룹 찾기
+          const applicableGroup = groups.find(g => {
+            if (g.isDefault) return false;
+            if (!g.applicableDate) return false;
+            const groupDate = dayjs(g.applicableDate.toDate()).format('YYYY-MM-DD');
+            const selectedDateStr = selectedDate.format('YYYY-MM-DD');
+            return groupDate === selectedDateStr && r.group === g.name;
+          });
+
+          if (applicableGroup) {
+            groupName = applicableGroup.name;
+            groupColor = applicableGroup.color || 'default';
           } else {
-              const group = groups.find(g => g.name === r.group);
-              groupName = group?.name || r.group;
-              groupColor = group?.color || 'default';
+            const defaultGroup = groups.find(g => g.id === DEFAULT_GROUP_ID);
+            groupName = defaultGroup?.name || '기본 그룹';
+            groupColor = defaultGroup?.color || '#8c8c8c';
           }
           return (
              <div>
