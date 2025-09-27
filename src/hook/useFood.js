@@ -31,30 +31,36 @@ const getSnackMealType = () => {
 };
 
 // 새로운 편차 계산 함수 (요구사항에 맞는 로직)
-const calculateCalorieOffset = (estimatedCalories, actualCalories, groupSettings, personalBias = 0) => {
+const calculateCalorieOffset = (estimatedCalories, actualCalories, groupSettings, personalBias = 0, currentMealType = null) => {
   // 1. 기본 계산식: (실제 칼로리 - 예측 칼로리)
   let offset = 0;
   
   if (estimatedCalories && actualCalories) {
     let difference = actualCalories - estimatedCalories;
     
-    // 2. 그룹 적용 조건: 그룹 설정이 있고 오늘이 applicableDate인 경우
-    if (groupSettings) {
-      const { deviationMultiplier = 1, defaultDeviation = 0 } = groupSettings;
-      
-      // a) 계산 결과가 양수일 경우: 부호를 음수로 전환 후 deviationMultiplier 적용
-      if (difference > 0) {
-        // 과식 시: -차이값 * (1 + multiplier)
-        // multiplier 0.3 + 1 = 1.3으로 계산하여 (-차이값 * 1.3) 형태
-        const adjustedMultiplier = 1 + deviationMultiplier;
-        offset = (-difference * adjustedMultiplier) + defaultDeviation;
+    // 2. 그룹 적용 조건: 그룹 설정이 있고 오늘이 applicableDate인 경우 + mealType이 일치하는 경우
+    if (groupSettings && groupSettings.applicableDate && dayjs(groupSettings.applicableDate).isSame(dayjs(), 'day')) {
+      // mealType이 설정되어 있고 현재 식사 타입과 일치하는 경우에만 적용
+      if (groupSettings.mealType && currentMealType && groupSettings.mealType === currentMealType) {
+        const { deviationMultiplier = 1, defaultDeviation = 0 } = groupSettings;
+        
+        // a) 계산 결과가 양수일 경우: 부호를 음수로 전환 후 deviationMultiplier 적용
+        if (difference > 0) {
+          // 과식 시: -차이값 * (1 + multiplier)
+          // multiplier 0.3 + 1 = 1.3으로 계산하여 (-차이값 * 1.3) 형태
+          const adjustedMultiplier = 1 + deviationMultiplier;
+          offset = (-difference * adjustedMultiplier) + defaultDeviation;
+        } else {
+          // 적게 먹을 시: 차이값 * (1 + multiplier) + defaultDeviation
+          const adjustedMultiplier = 1 + deviationMultiplier;
+          offset = (difference * adjustedMultiplier) + defaultDeviation;
+        }
       } else {
-        // 적게 먹을 시: 차이값 * (1 + multiplier) + defaultDeviation
-        const adjustedMultiplier = 1 + deviationMultiplier;
-        offset = (difference * adjustedMultiplier) + defaultDeviation;
+        // 그룹 설정이 있지만 mealType이 일치하지 않으면 기본 차이값만 사용
+        offset = difference;
       }
     } else {
-      // 그룹 설정이 없으면 기본 차이값만 사용
+      // 그룹 설정이 없거나 날짜가 맞지 않으면 기본 차이값만 사용
       offset = difference;
     }
   }
@@ -227,21 +233,24 @@ export const useFood = () => {
         // 개인 편차 설정 가져오기
         const personalBias = await getPersonalCalorieBias(email);
         
-        // 그룹 설정 우선순위: 1) 기존 저장된 그룹 설정, 2) 현재 그룹 설정
+        // 그룹 설정 우선순위: 1) 기존 저장된 그룹 설정 (오늘 날짜만), 2) 현재 그룹 설정
         let groupSettings = null;
         const groupId = await getUserGroupId(email);
         
-        // 기존 데이터에서 그룹 설정 확인
+        // 기존 데이터에서 그룹 설정 확인 (오늘 날짜인 경우만)
         if (currentData[mealType]?.groupDeviationConfig) {
           const savedConfig = currentData[mealType].groupDeviationConfig;
-          groupSettings = {
-            deviationMultiplier: savedConfig.deviationMultiplier,
-            defaultDeviation: savedConfig.defaultDeviation,
-            groupId: savedConfig.groupId,
-            applicableDate: savedConfig.appliedAt
-          };
+          const appliedDate = dayjs(savedConfig.appliedAt);
+          if (appliedDate.isSame(dayjs(), 'day')) {
+            groupSettings = {
+              deviationMultiplier: savedConfig.deviationMultiplier,
+              defaultDeviation: savedConfig.defaultDeviation,
+              groupId: savedConfig.groupId,
+              applicableDate: savedConfig.appliedAt
+            };
+          }
         } else if (groupId) {
-          // 저장된 설정이 없으면 현재 그룹 설정 조회
+          // 저장된 설정이 없거나 날짜가 맞지 않으면 현재 그룹 설정 조회
           groupSettings = await getGroupDeviationSettings(groupId);
         }
         
@@ -277,7 +286,7 @@ export const useFood = () => {
           
           // 간식에 대한 편차 계산
           const snackOffset = newSnackEstimated && newSnackActual ? 
-            calculateCalorieOffset(newSnackEstimated, newSnackActual, groupSettings, personalBias) : 
+            calculateCalorieOffset(newSnackEstimated, newSnackActual, groupSettings, personalBias, 'snacks') : 
             personalBias;
           
           currentData.snacks = {
@@ -312,7 +321,7 @@ export const useFood = () => {
           
           // 새로운 편차 계산 로직 적용 (간식 포함)
           const calculatedOffset = newMealEstimated && newMealActual ? 
-            calculateCalorieOffset(newMealEstimated, newMealActual, groupSettings, personalBias) : 
+            calculateCalorieOffset(newMealEstimated, newMealActual, groupSettings, personalBias, targetMealType) : 
             personalBias;
           
           currentData[targetMealType] = {
@@ -377,7 +386,7 @@ export const useFood = () => {
           
           // 새로운 편차 계산 로직 적용 (간식 포함 총 칼로리)
           const calculatedOffset = totalEstimated && totalActual ? 
-            calculateCalorieOffset(totalEstimated, totalActual, groupSettings, personalBias) : 
+            calculateCalorieOffset(totalEstimated, totalActual, groupSettings, personalBias, mealType) : 
             personalBias;
           
           // 기존 식사의 음식 목록에서 간식 제외
@@ -698,7 +707,8 @@ export const useFood = () => {
               mealData.originalCalories.estimated,
               mealData.originalCalories.actual,
               groupSettings,
-              personalBias
+              personalBias,
+              mealType
             );
           }
 

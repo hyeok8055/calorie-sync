@@ -1131,14 +1131,14 @@ const CalorieAdminPage = () => {
         const userGroup = groups.find(g => g.name === userGroupId);
         if (userGroup) {
           groupSettings = {
-            applicableDate: new Date(),
+            applicableDate: selectedDate.toDate(), // 선택된 날짜로 설정
             defaultDeviation: userGroup.defaultDeviation || 0,
             deviationMultiplier: userGroup.deviationMultiplier || 0.2,
             groupId: userGroup.id
           };
           
           groupDeviationConfig = {
-            appliedAt: new Date().toISOString(),
+            appliedAt: new Date().toISOString(), // 적용 시점 기록
             appliedBy: "admin",
             defaultDeviation: userGroup.defaultDeviation || 0,
             deviationMultiplier: userGroup.deviationMultiplier || 0.2,
@@ -1253,18 +1253,20 @@ const CalorieAdminPage = () => {
          const targetGroup = groups.find(g => g.name === groupKeyOrId);
          if (targetGroup) {
            groupSettings = {
-             applicableDate: new Date(),
+             applicableDate: selectedDate.toDate(), // 선택된 날짜로 설정
              defaultDeviation: targetGroup.defaultDeviation || 0,
              deviationMultiplier: targetGroup.deviationMultiplier || 0.2,
-             groupId: targetGroup.id
+             groupId: targetGroup.id,
+             mealType: selectedMealType // 적용된 식사 타입 기록
            };
            
            groupDeviationConfig = {
-             appliedAt: new Date().toISOString(),
+             appliedAt: new Date().toISOString(), // 적용 시점 기록
              appliedBy: "admin",
              defaultDeviation: targetGroup.defaultDeviation || 0,
              deviationMultiplier: targetGroup.deviationMultiplier || 0.2,
-             groupId: targetGroup.id
+             groupId: targetGroup.id,
+             mealType: selectedMealType // 적용된 식사 타입 기록
            };
          }
        }
