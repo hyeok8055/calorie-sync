@@ -233,25 +233,58 @@ export const useFood = () => {
         // 개인 편차 설정 가져오기
         const personalBias = await getPersonalCalorieBias(email);
         
-        // 그룹 설정 우선순위: 1) 기존 저장된 그룹 설정 (오늘 날짜만), 2) 현재 그룹 설정
+        // 그룹 설정 우선순위: 관리자 적용 시 최신 설정 우선, 사용자 직접 저장 시 기존 설정 우선
         let groupSettings = null;
         const groupId = await getUserGroupId(email);
-        
-        // 기존 데이터에서 그룹 설정 확인 (오늘 날짜인 경우만)
-        if (currentData[mealType]?.groupDeviationConfig) {
-          const savedConfig = currentData[mealType].groupDeviationConfig;
-          const appliedDate = dayjs(savedConfig.appliedAt);
-          if (appliedDate.isSame(dayjs(), 'day')) {
-            groupSettings = {
-              deviationMultiplier: savedConfig.deviationMultiplier,
-              defaultDeviation: savedConfig.defaultDeviation,
-              groupId: savedConfig.groupId,
-              applicableDate: savedConfig.appliedAt
-            };
+
+        if (groupId) {
+          try {
+            // 현재 그룹 설정 조회 (항상 최신 설정 확인)
+            const currentGroupSettings = await getGroupDeviationSettings(groupId);
+
+            // 기존 저장된 설정 확인
+            const existingConfig = currentData[mealType]?.groupDeviationConfig;
+            const hasExistingConfig = existingConfig && dayjs(existingConfig.appliedAt).isSame(dayjs(), 'day');
+
+            // 우선순위 결정 로직
+            if (currentGroupSettings && currentGroupSettings.applicableDate) {
+              // 그룹 설정이 있고 오늘 날짜인 경우: 최신 그룹 설정 우선 사용
+              const groupApplicableDate = dayjs(currentGroupSettings.applicableDate.toDate ? currentGroupSettings.applicableDate.toDate() : currentGroupSettings.applicableDate);
+              if (groupApplicableDate.isSame(dayjs(), 'day')) {
+                groupSettings = {
+                  deviationMultiplier: currentGroupSettings.deviationMultiplier,
+                  defaultDeviation: currentGroupSettings.defaultDeviation,
+                  groupId: currentGroupSettings.groupId,
+                  applicableDate: currentGroupSettings.applicableDate,
+                  mealType: currentGroupSettings.mealType // mealType 추가
+                };
+              }
+            }
+
+            // 그룹 설정이 없는 경우 기존 저장된 설정 사용 (fallback)
+            if (!groupSettings && hasExistingConfig) {
+              groupSettings = {
+                deviationMultiplier: existingConfig.deviationMultiplier,
+                defaultDeviation: existingConfig.defaultDeviation,
+                groupId: existingConfig.groupId,
+                applicableDate: existingConfig.appliedAt,
+                mealType: existingConfig.mealType
+              };
+            }
+          } catch (error) {
+            console.error('그룹 설정 조회 실패:', error);
+            // 에러 발생 시 기존 저장된 설정으로 fallback
+            const existingConfig = currentData[mealType]?.groupDeviationConfig;
+            if (existingConfig && dayjs(existingConfig.appliedAt).isSame(dayjs(), 'day')) {
+              groupSettings = {
+                deviationMultiplier: existingConfig.deviationMultiplier,
+                defaultDeviation: existingConfig.defaultDeviation,
+                groupId: existingConfig.groupId,
+                applicableDate: existingConfig.appliedAt,
+                mealType: existingConfig.mealType
+              };
+            }
           }
-        } else if (groupId) {
-          // 저장된 설정이 없거나 날짜가 맞지 않으면 현재 그룹 설정 조회
-          groupSettings = await getGroupDeviationSettings(groupId);
         }
         
         // 기존 편차 설정도 유지 (호환성을 위해)
@@ -556,8 +589,8 @@ export const useFood = () => {
         if (groupSettings) {
           finalDeviationConfig = {
             type: 'percentage',
-            value: groupSettings.deviationMultiplier || 1,
-            defaultDeviation: groupSettings.defaultDeviation || 0
+            value: groupSettings.deviationMultiplier !== undefined ? groupSettings.deviationMultiplier : 1,
+            defaultDeviation: groupSettings.defaultDeviation !== undefined ? groupSettings.defaultDeviation : 0
           };
         }
       }

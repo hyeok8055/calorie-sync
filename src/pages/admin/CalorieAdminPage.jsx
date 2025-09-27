@@ -294,8 +294,8 @@ const CalorieAdminPage = () => {
           name: values.name,
           description: values.description,
           color: typeof values.color === 'object' ? values.color.toHexString() : values.color,
-          deviationMultiplier: values.deviationMultiplier || 0.2, // 기본값 20%
-          defaultDeviation: values.defaultDeviation || 0, // 기본값 0
+          deviationMultiplier: values.deviationMultiplier !== undefined ? values.deviationMultiplier : 0.2, // 기본값 20%
+          defaultDeviation: values.defaultDeviation !== undefined ? values.defaultDeviation : 0, // 기본값 0
           createdDate: Timestamp.now(), // 그룹 생성 날짜
           applicableDate: Timestamp.fromDate(selectedDate.toDate()), // 상단에서 선택된 날짜로 자동 설정
       };
@@ -342,16 +342,85 @@ const CalorieAdminPage = () => {
       confirm({
           title: `${group.name} 그룹 삭제`,
           icon: <ExclamationCircleOutlined />,
-          content: `정말로 '${group.name}' 그룹을 삭제하시겠습니까? 소속된 사용자들은 '기본 그룹'으로 이동됩니다.`,
-          okText: '삭제',
+          content: (
+            <div>
+              <p>정말로 '{group.name}' 그룹을 삭제하시겠습니까?</p>
+              <p>소속된 사용자들은 '기본 그룹'으로 이동됩니다.</p>
+              <p><strong>주의: {dayjs(group.applicableDate?.toDate()).format('YYYY-MM-DD')} 날짜의 그룹 편차 설정도 함께 롤백됩니다.</strong></p>
+            </div>
+          ),
+          okText: '삭제 및 롤백',
           okType: 'danger',
           cancelText: '취소',
           onOk: async () => {
               try {
                   setLoadingGroups(true);
+
+                  // 1. 그룹 사용자 목록 가져오기
                   const usersInGroupQuery = query(collection(db, 'users'), where('group', '==', group.name));
                   const usersSnapshot = await getDocs(usersInGroupQuery);
+                  const groupUserEmails = usersSnapshot.docs.map(doc => doc.id);
 
+                  // 2. 그룹 편차 설정 롤백 (그룹의 applicableDate에 해당하는 날짜만)
+                  if (groupUserEmails.length > 0) {
+                    const rollbackBatch = writeBatch(db);
+                    let rollbackCount = 0;
+
+                    // 그룹의 적용 날짜 확인
+                    const groupApplicableDate = group.applicableDate ? 
+                      dayjs(group.applicableDate.toDate()).format('YYYY-MM-DD') : null;
+
+                    for (const userEmail of groupUserEmails) {
+                      try {
+                        // 그룹의 applicableDate에 해당하는 날짜의 음식 문서만 확인
+                        if (groupApplicableDate) {
+                          const foodDocRef = doc(db, 'users', userEmail, 'foods', groupApplicableDate);
+                          const foodDocSnap = await getDoc(foodDocRef);
+
+                          if (foodDocSnap.exists()) {
+                            const foodData = foodDocSnap.data();
+                            let needsUpdate = false;
+                            const updatedFoodData = { ...foodData };
+
+                            // 각 식사 타입에서 그룹 편차 설정 제거
+                            ['breakfast', 'lunch', 'dinner', 'snacks'].forEach(mealType => {
+                              if (foodData[mealType] && foodData[mealType].groupDeviationConfig) {
+                                // 해당 그룹의 설정인지 확인
+                                if (foodData[mealType].groupDeviationConfig.groupId === group.id) {
+                                  // 그룹 편차 설정 제거
+                                  const { groupDeviationConfig, ...mealDataWithoutConfig } = foodData[mealType];
+                                  updatedFoodData[mealType] = {
+                                    ...mealDataWithoutConfig,
+                                    calorieDeviation: {
+                                      ...mealDataWithoutConfig.calorieDeviation,
+                                      applied: mealDataWithoutConfig.calorieDeviation?.personalBias || 0,
+                                      groupSettings: null
+                                    },
+                                    updatedAt: new Date().toISOString()
+                                  };
+                                  needsUpdate = true;
+                                }
+                              }
+                            });
+
+                            if (needsUpdate) {
+                              rollbackBatch.update(foodDocRef, updatedFoodData);
+                              rollbackCount++;
+                            }
+                          }
+                        }
+                      } catch (userError) {
+                        console.error(`사용자 ${userEmail} 편차 롤백 실패:`, userError);
+                      }
+                    }
+
+                    if (rollbackCount > 0) {
+                      await rollbackBatch.commit();
+                      console.log(`${rollbackCount}개의 식사 데이터에서 그룹 편차 설정이 롤백되었습니다.`);
+                    }
+                  }
+
+                  // 3. 사용자들을 기본 그룹으로 이동
                   const batch = writeBatch(db);
                   usersSnapshot.forEach(userDoc => {
                       const userRef = doc(db, 'users', userDoc.id);
@@ -359,7 +428,7 @@ const CalorieAdminPage = () => {
                   });
                   await batch.commit();
 
-                  // users 서브컬렉션의 모든 문서 삭제
+                  // 4. 그룹의 사용자 서브컬렉션 삭제
                   const groupUsersQuery = query(collection(db, 'calorieGroups', group.id, 'users'));
                   const groupUsersSnapshot = await getDocs(groupUsersQuery);
                   const usersBatch = writeBatch(db);
@@ -368,15 +437,18 @@ const CalorieAdminPage = () => {
                   });
                   await usersBatch.commit();
 
-                  // 그룹 문서 삭제
+                  // 5. 그룹 문서 삭제
                   const groupRef = doc(db, 'calorieGroups', group.id);
                   await deleteDoc(groupRef);
-                  message.success(`'${group.name}' 그룹이 삭제되었습니다.`);
+
+                  message.success(`'${group.name}' 그룹이 삭제되고 편차 설정이 롤백되었습니다.`);
                   await loadData();
               } catch (error) {
                   console.error('그룹 삭제 실패:', error);
                   message.error('그룹 삭제에 실패했습니다.');
-              } finally { setLoadingGroups(false); }
+              } finally {
+                  setLoadingGroups(false);
+              }
           },
       });
   };
@@ -1254,8 +1326,8 @@ const CalorieAdminPage = () => {
          if (targetGroup) {
            groupSettings = {
              applicableDate: selectedDate.toDate(), // 선택된 날짜로 설정
-             defaultDeviation: targetGroup.defaultDeviation || 0,
-             deviationMultiplier: targetGroup.deviationMultiplier || 0.2,
+             defaultDeviation: targetGroup.defaultDeviation !== undefined ? targetGroup.defaultDeviation : 0,
+             deviationMultiplier: targetGroup.deviationMultiplier !== undefined ? targetGroup.deviationMultiplier : 0.2,
              groupId: targetGroup.id,
              mealType: selectedMealType // 적용된 식사 타입 기록
            };
@@ -1263,8 +1335,8 @@ const CalorieAdminPage = () => {
            groupDeviationConfig = {
              appliedAt: new Date().toISOString(), // 적용 시점 기록
              appliedBy: "admin",
-             defaultDeviation: targetGroup.defaultDeviation || 0,
-             deviationMultiplier: targetGroup.deviationMultiplier || 0.2,
+             defaultDeviation: targetGroup.defaultDeviation !== undefined ? targetGroup.defaultDeviation : 0,
+             deviationMultiplier: targetGroup.deviationMultiplier !== undefined ? targetGroup.deviationMultiplier : 0.2,
              groupId: targetGroup.id,
              mealType: selectedMealType // 적용된 식사 타입 기록
            };
@@ -1592,8 +1664,8 @@ const CalorieAdminPage = () => {
            <Form form={groupEditForm} layout="vertical" onFinish={handleSaveGroup} initialValues={editingGroup ? { 
              ...editingGroup, 
              color: editingGroup.color || '#1677ff',
-             deviationMultiplier: editingGroup.deviationMultiplier || 0.2,
-             defaultDeviation: editingGroup.defaultDeviation || 0,
+             deviationMultiplier: editingGroup.deviationMultiplier !== undefined ? editingGroup.deviationMultiplier : 0.2,
+             defaultDeviation: editingGroup.defaultDeviation !== undefined ? editingGroup.defaultDeviation : 0,
 
            } : { 
              name: '', 

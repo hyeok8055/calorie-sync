@@ -120,10 +120,11 @@ const useCalorieDeviation = () => {
         
         if (applicableDateStr === today) {
           return {
-            deviationMultiplier: groupData.deviationMultiplier || 1,
-            defaultDeviation: groupData.defaultDeviation || 0,
+            deviationMultiplier: groupData.deviationMultiplier !== undefined ? groupData.deviationMultiplier : 1,
+            defaultDeviation: groupData.defaultDeviation !== undefined ? groupData.defaultDeviation : 0,
             groupId: groupId,
-            applicableDate: groupData.applicableDate
+            applicableDate: groupData.applicableDate,
+            mealType: groupData.mealType // mealType 추가
           };
         }
       }
