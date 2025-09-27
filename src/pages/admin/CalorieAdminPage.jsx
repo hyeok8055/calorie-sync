@@ -998,7 +998,7 @@ const CalorieAdminPage = () => {
                 <Text>예:{estimatedCalories} / 실:{actualCalories}</Text>
                 <Space>
                    <Tooltip title={`원본차(${originalDifference})`}><Text style={{ color: originalDifference > 0 ? '#ff4d4f' : originalDifference < 0 ? '#1677ff' : 'inherit' }}>({originalDifference>0?'+':''}{originalDifference})</Text></Tooltip>
-                   {appliedDeviation !== null && appliedDeviation !== 0 && (<Tooltip title={`적용편차(${appliedDeviation})`}><Text strong style={{ color: finalDifference > 0 ? '#ff4d4f' : finalDifference < 0 ? '#1677ff' : 'inherit' }}>→{finalDifference>0?'+':''}{finalDifference}</Text></Tooltip>)}
+                   {appliedDeviation !== null && (<Tooltip title={`적용편차(${appliedDeviation})`}><Text strong style={{ color: finalDifference > 0 ? '#ff4d4f' : finalDifference < 0 ? '#1677ff' : 'inherit' }}>→{finalDifference>0?'+':''}{finalDifference}</Text></Tooltip>)}
                 </Space>
              </Space>
         );
@@ -1204,16 +1204,16 @@ const CalorieAdminPage = () => {
         if (userGroup) {
           groupSettings = {
             applicableDate: selectedDate.toDate(), // 선택된 날짜로 설정
-            defaultDeviation: userGroup.defaultDeviation || 0,
-            deviationMultiplier: userGroup.deviationMultiplier || 0.2,
+            defaultDeviation: userGroup.defaultDeviation !== undefined ? userGroup.defaultDeviation : 0,
+            deviationMultiplier: userGroup.deviationMultiplier !== undefined ? userGroup.deviationMultiplier : 0.2,
             groupId: userGroup.id
           };
           
           groupDeviationConfig = {
             appliedAt: new Date().toISOString(), // 적용 시점 기록
             appliedBy: "admin",
-            defaultDeviation: userGroup.defaultDeviation || 0,
-            deviationMultiplier: userGroup.deviationMultiplier || 0.2,
+            defaultDeviation: userGroup.defaultDeviation !== undefined ? userGroup.defaultDeviation : 0,
+            deviationMultiplier: userGroup.deviationMultiplier !== undefined ? userGroup.deviationMultiplier : 0.2,
             groupId: userGroup.id
           };
         }
