@@ -1302,16 +1302,16 @@ const CalorieAdminPage = () => {
         if (userGroup) {
           groupSettings = {
             applicableDate: selectedDate.toDate(), // 선택된 날짜로 설정
-            defaultDeviation: userGroup.defaultDeviation !== undefined ? userGroup.defaultDeviation : 0,
-            deviationMultiplier: userGroup.deviationMultiplier !== undefined ? userGroup.deviationMultiplier : 0.2,
+            defaultDeviation: userGroup.defaultDeviation ?? 0,
+            deviationMultiplier: userGroup.deviationMultiplier ?? 0.2,
             groupId: userGroup.id
           };
           
           groupDeviationConfig = {
             appliedAt: new Date().toISOString(), // 적용 시점 기록
             appliedBy: "admin",
-            defaultDeviation: userGroup.defaultDeviation !== undefined ? userGroup.defaultDeviation : 0,
-            deviationMultiplier: userGroup.deviationMultiplier !== undefined ? userGroup.deviationMultiplier : 0.2,
+            defaultDeviation: userGroup.defaultDeviation ?? 0,
+            deviationMultiplier: userGroup.deviationMultiplier ?? 0.2,
             groupId: userGroup.id
           };
         }
@@ -1325,7 +1325,8 @@ const CalorieAdminPage = () => {
         
         // 그룹 설정이 있는 경우 그룹 편차 계산 적용
         if (groupSettings) {
-          const { deviationMultiplier = 0.2, defaultDeviation = 0 } = groupSettings;
+          const deviationMultiplier = groupSettings.deviationMultiplier ?? 0.2;
+          const defaultDeviation = groupSettings.defaultDeviation ?? 0;
           
           if (difference > 0) {
             // 과식 시: -차이값 * (1 + multiplier)
@@ -1424,8 +1425,8 @@ const CalorieAdminPage = () => {
          if (targetGroup) {
            groupSettings = {
              applicableDate: selectedDate.toDate(), // 선택된 날짜로 설정
-             defaultDeviation: targetGroup.defaultDeviation !== undefined ? targetGroup.defaultDeviation : 0,
-             deviationMultiplier: targetGroup.deviationMultiplier !== undefined ? targetGroup.deviationMultiplier : 0.2,
+             defaultDeviation: targetGroup.defaultDeviation ?? 0,
+             deviationMultiplier: targetGroup.deviationMultiplier ?? 0.2,
              groupId: targetGroup.id,
              mealType: selectedMealType // 적용된 식사 타입 기록
            };
@@ -1433,8 +1434,8 @@ const CalorieAdminPage = () => {
            groupDeviationConfig = {
              appliedAt: new Date().toISOString(), // 적용 시점 기록
              appliedBy: "admin",
-             defaultDeviation: targetGroup.defaultDeviation !== undefined ? targetGroup.defaultDeviation : 0,
-             deviationMultiplier: targetGroup.deviationMultiplier !== undefined ? targetGroup.deviationMultiplier : 0.2,
+             defaultDeviation: targetGroup.defaultDeviation ?? 0,
+             deviationMultiplier: targetGroup.deviationMultiplier ?? 0.2,
              groupId: targetGroup.id,
              mealType: selectedMealType // 적용된 식사 타입 기록
            };
@@ -1492,7 +1493,8 @@ const CalorieAdminPage = () => {
             
             // 그룹 설정이 있는 경우 그룹 편차 계산 적용
             if (groupSettings) {
-              const { deviationMultiplier = 0.2, defaultDeviation = 0 } = groupSettings;
+              const deviationMultiplier = groupSettings.deviationMultiplier ?? 0.2;
+              const defaultDeviation = groupSettings.defaultDeviation ?? 0;
               
               if (difference > 0) {
                 // 과식 시: -차이값 * (1 + multiplier)
@@ -1762,8 +1764,8 @@ const CalorieAdminPage = () => {
            <Form form={groupEditForm} layout="vertical" onFinish={handleSaveGroup} initialValues={editingGroup ? { 
              ...editingGroup, 
              color: editingGroup.color || '#1677ff',
-             deviationMultiplier: editingGroup.deviationMultiplier !== undefined ? editingGroup.deviationMultiplier : 0.2,
-             defaultDeviation: editingGroup.defaultDeviation !== undefined ? editingGroup.defaultDeviation : 0,
+             deviationMultiplier: editingGroup.deviationMultiplier ?? 0.2,
+             defaultDeviation: editingGroup.defaultDeviation ?? 0,
 
            } : { 
              name: '', 
