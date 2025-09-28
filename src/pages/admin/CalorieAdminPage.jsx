@@ -1292,28 +1292,41 @@ const CalorieAdminPage = () => {
         return;
       }
       
-      // 사용자의 그룹 설정 가져오기
+      // 사용자의 그룹 설정 가져오기 (applicableDate 체크)
       const userGroupId = userInfo.group;
       let groupSettings = null;
       let groupDeviationConfig = null;
       
       if (userGroupId !== DEFAULT_GROUP_VALUE) {
-        const userGroup = groups.find(g => g.name === userGroupId);
+        const userGroup = groups.find(g => 
+          g.name === userGroupId && 
+          !g.isDefault && 
+          g.applicableDate && 
+          dayjs(g.applicableDate.toDate()).format('YYYY-MM-DD') === selectedDate.format('YYYY-MM-DD')
+        );
         if (userGroup) {
-          groupSettings = {
-            applicableDate: selectedDate.toDate(), // 선택된 날짜로 설정
-            defaultDeviation: userGroup.defaultDeviation ?? 0,
-            deviationMultiplier: userGroup.deviationMultiplier ?? 0.2,
-            groupId: userGroup.id
-          };
+          // 그룹의 applicableDate가 선택된 날짜와 일치하는지 확인 (이미 위에서 체크했으므로 생략 가능)
+          const groupApplicableDate = dayjs(userGroup.applicableDate.toDate()).format('YYYY-MM-DD');
+          const selectedDateStr = selectedDate.format('YYYY-MM-DD');
           
-          groupDeviationConfig = {
-            appliedAt: new Date().toISOString(), // 적용 시점 기록
-            appliedBy: "admin",
-            defaultDeviation: userGroup.defaultDeviation ?? 0,
-            deviationMultiplier: userGroup.deviationMultiplier ?? 0.2,
-            groupId: userGroup.id
-          };
+          // 일단위 동작: 그룹의 적용 날짜와 선택된 날짜가 같아야만 그룹 설정 적용
+          if (groupApplicableDate === selectedDateStr) {
+            groupSettings = {
+              applicableDate: selectedDate.toDate(),
+              defaultDeviation: userGroup.defaultDeviation ?? 0,
+              deviationMultiplier: userGroup.deviationMultiplier ?? 0.2,
+              groupId: userGroup.id
+            };
+            
+            groupDeviationConfig = {
+              appliedAt: new Date().toISOString(),
+              appliedBy: "admin",
+              defaultDeviation: userGroup.defaultDeviation ?? 0,
+              deviationMultiplier: userGroup.deviationMultiplier ?? 0.2,
+              groupId: userGroup.id
+            };
+          }
+          // 그룹이 해당 날짜에 적용되지 않으면 groupSettings는 null로 유지 (개인 편차만 적용)
         }
       }
       
@@ -1417,28 +1430,50 @@ const CalorieAdminPage = () => {
         return; 
       }
       
-      // 그룹 설정 가져오기
+      // 그룹 설정 가져오기 (applicableDate 체크)
        let groupSettings = null;
        let groupDeviationConfig = null;
        if (groupKeyOrId !== DEFAULT_GROUP_VALUE) {
-         const targetGroup = groups.find(g => g.name === groupKeyOrId);
+         const targetGroup = groups.find(g => 
+           g.name === groupKeyOrId && 
+           !g.isDefault && 
+           g.applicableDate && 
+           dayjs(g.applicableDate.toDate()).format('YYYY-MM-DD') === selectedDate.format('YYYY-MM-DD')
+         );
          if (targetGroup) {
-           groupSettings = {
-             applicableDate: selectedDate.toDate(), // 선택된 날짜로 설정
-             defaultDeviation: targetGroup.defaultDeviation ?? 0,
-             deviationMultiplier: targetGroup.deviationMultiplier ?? 0.2,
-             groupId: targetGroup.id,
-             mealType: selectedMealType // 적용된 식사 타입 기록
-           };
+           // 그룹의 applicableDate가 선택된 날짜와 일치하는지 확인 (이미 위에서 체크했으므로 생략 가능)
+           const groupApplicableDate = dayjs(targetGroup.applicableDate.toDate()).format('YYYY-MM-DD');
+           const selectedDateStr = selectedDate.format('YYYY-MM-DD');
            
-           groupDeviationConfig = {
-             appliedAt: new Date().toISOString(), // 적용 시점 기록
-             appliedBy: "admin",
-             defaultDeviation: targetGroup.defaultDeviation ?? 0,
-             deviationMultiplier: targetGroup.deviationMultiplier ?? 0.2,
-             groupId: targetGroup.id,
-             mealType: selectedMealType // 적용된 식사 타입 기록
-           };
+           // 일단위 동작: 그룹의 적용 날짜와 선택된 날짜가 같아야만 그룹 설정 적용
+           if (groupApplicableDate === selectedDateStr) {
+             groupSettings = {
+               applicableDate: selectedDate.toDate(),
+               defaultDeviation: targetGroup.defaultDeviation ?? 0,
+               deviationMultiplier: targetGroup.deviationMultiplier ?? 0.2,
+               groupId: targetGroup.id,
+               mealType: selectedMealType
+             };
+             
+             groupDeviationConfig = {
+               appliedAt: new Date().toISOString(),
+               appliedBy: "admin",
+               defaultDeviation: targetGroup.defaultDeviation ?? 0,
+               deviationMultiplier: targetGroup.deviationMultiplier ?? 0.2,
+               groupId: targetGroup.id,
+               mealType: selectedMealType
+             };
+           } else {
+             // 그룹이 해당 날짜에 적용되지 않으면 경고 메시지
+             message.warning(`${targetGroup.name} 그룹은 ${groupApplicableDate} 날짜에만 적용됩니다.`);
+             setLoadingUsers(false);
+             return;
+           }
+         } else {
+           // 해당 날짜에 적용되는 그룹을 찾을 수 없음
+           message.warning(`선택된 날짜(${selectedDate.format('YYYY-MM-DD')})에 적용되는 '${groupKeyOrId}' 그룹을 찾을 수 없습니다.`);
+           setLoadingUsers(false);
+           return;
          }
        }
       
