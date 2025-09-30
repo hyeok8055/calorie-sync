@@ -257,56 +257,30 @@ const CaloriEntry = () => {
                   return (
                     <List.Item style={{ 
                       display: 'flex', 
-                      alignItems: 'center',
+                      alignItems: 'center', 
+                      justifyContent: 'space-between',
                       padding: '8px 10px',
                       borderRadius: '8px',
                       backgroundColor: 'white',
                       marginBottom: '8px', 
                       boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
                     }}>
-                      <div style={{ 
-                        flex: 1, 
-                        overflow: 'hidden',
-                        whiteSpace: 'nowrap',
-                        textOverflow: 'ellipsis',
-                        marginRight: '10px'
-                      }}>
-                        <Text style={{ 
-                          fontSize: '16px', 
-                          fontWeight: '600', 
-                          fontFamily: 'Pretendard-600'
-                        }}>
-                          {item}
-                        </Text>
-                      </div>
-                      <div style={{ 
-                        flex: '0 0 auto', 
-                        whiteSpace: 'nowrap',
-                        textOverflow: 'ellipsis',
-                        textAlign: 'right',
-                        marginRight: '2px'
-                      }}>
-                        <Text style={{ 
-                          fontSize: '10px', 
-                          fontWeight: '400', 
-                          fontFamily: 'Pretendard-400'
-                        }}>
-                          ({portion}인분당 {displayWeightText})
-                        </Text>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                      <Text style={{ fontSize: '16px', fontWeight: '600', fontFamily: 'Pretendard-600' }}>
+                        {item} <span style={{ fontSize: '12px', fontWeight: '400', fontFamily: 'Pretendard-400'  }}>({portion}인분 당 {displayWeightText})</span>
+                      </Text>
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
                         <InputNumber
                           min={0.5}
                           step={0.5}
                           value={foodPortions[item] || 1} // 기본값을 1로 수정
                           onChange={(value) => handlePortionChange(item, value)}
                           style={{ 
-                            width: '50px',
+                            width: '65px',
                             borderRadius: '6px',
-                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                           }}
                         />
-                        <Text style={{ marginLeft: '2px', fontSize: '13px' }}>인분</Text>
+                        <Text style={{ marginLeft: '5px', fontSize: '14px' }}>인분</Text>
                       </div>
                     </List.Item>
                   );

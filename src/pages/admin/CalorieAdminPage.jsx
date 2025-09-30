@@ -524,10 +524,22 @@ const CalorieAdminPage = () => {
     }
   };
 
-  // 사용자 추가 모달
+  // 그룹 사용자 관리 모달 열기
   const handleOpenAddUserModal = (group) => {
     setTargetGroupForAddingUser(group);
-    setTargetKeysForTransfer([]);
+
+    // 그룹에 속한 사용자들의 key를 targetKeys로 설정
+    const groupUserKeys = users
+      .filter(user => {
+        if (group.isDefault) {
+          return user.group === DEFAULT_GROUP_VALUE;
+        } else {
+          return user.group === group.name;
+        }
+      })
+      .map(user => user.key);
+
+    setTargetKeysForTransfer(groupUserKeys);
     setIsAddUserModalVisible(true);
   };
   
@@ -632,27 +644,19 @@ const CalorieAdminPage = () => {
     }
   };
 
-  // Transfer 데이터 소스 준비 (모든 사용자 중 현재 그룹 제외)
+  // Transfer 데이터 소스 준비 (모든 사용자 표시)
   const getTransferDataSource = () => {
     if (!targetGroupForAddingUser) return [];
-    return users
-      .filter(user => {
-           if (targetGroupForAddingUser.isDefault) {
-               return user.group !== DEFAULT_GROUP_VALUE;
-           } else {
-               return user.group !== targetGroupForAddingUser.name;
-           }
-      })
-      .map(user => {
-          const currentGroupName = user.group === DEFAULT_GROUP_VALUE
-              ? '기본 그룹'
-              : (groups.find(g => g.name === user.group)?.name || user.group);
-          return {
-              key: user.key,
-              title: `${user.name} (${user.email})`,
-              description: `현재 그룹: ${currentGroupName}`
-          };
-      });
+    return users.map(user => {
+        const currentGroupName = user.group === DEFAULT_GROUP_VALUE
+            ? '기본 그룹'
+            : (groups.find(g => g.name === user.group)?.name || user.group);
+        return {
+            key: user.key,
+            title: `${user.name} (${user.email})`,
+            description: `현재 그룹: ${currentGroupName}`
+        };
+    });
   };
 
   // Transfer 선택 변경 핸들러
@@ -660,22 +664,13 @@ const CalorieAdminPage = () => {
     setTargetKeysForTransfer(nextTargetKeys);
   };
 
-  // 사용자를 그룹에 추가하는 로직
-  const handleAddUsersToGroup = async () => {
-    if (!targetGroupForAddingUser || targetKeysForTransfer.length === 0) {
-        message.warning('추가할 사용자를 선택하세요.');
+  // 그룹 멤버십 관리 (추가/제거 모두 처리)
+  const handleManageGroupMembership = async () => {
+    if (!targetGroupForAddingUser) {
+        message.warning('대상 그룹이 선택되지 않았습니다.');
         return;
     }
-    
-    // 대상 그룹 유효성 검사
-    const isValidTargetGroup = targetGroupForAddingUser.isDefault || 
-                              groups.some(g => g.id === targetGroupForAddingUser.id && !g.isDefault);
-    
-    if (!isValidTargetGroup) {
-      message.error('유효하지 않은 대상 그룹입니다.');
-      return;
-    }
-    
+
     const targetGroupValue = targetGroupForAddingUser.isDefault
         ? DEFAULT_GROUP_VALUE
         : targetGroupForAddingUser.name;
@@ -683,32 +678,50 @@ const CalorieAdminPage = () => {
     try {
         setLoadingUsers(true);
         const batch = writeBatch(db);
-        
-        targetKeysForTransfer.forEach(userEmail => {
-            const userRef = doc(db, 'users', userEmail);
-            batch.update(userRef, { group: targetGroupValue });
-            
-            // calorieGroups/{그룹ID}/users/ 컬렉션에 사용자 email 저장
-            if (!targetGroupForAddingUser.isDefault) {
-              const groupUserRef = doc(db, 'calorieGroups', targetGroupForAddingUser.id, 'users', userEmail);
-              const user = users.find(u => u.key === userEmail);
-              batch.set(groupUserRef, {
-                email: userEmail,
-                uid: user?.uid, // 호환성을 위해 uid 유지
-                addedAt: new Date(),
-                addedBy: 'admin'
-              });
+
+        // 모든 사용자들을 순회하면서 그룹 멤버십 결정
+        users.forEach(user => {
+            const shouldBeInGroup = targetKeysForTransfer.includes(user.key);
+            const currentGroupValue = user.group;
+
+            if (shouldBeInGroup && currentGroupValue !== targetGroupValue) {
+                // 그룹에 추가해야 하는 경우
+                const userRef = doc(db, 'users', user.key);
+                batch.update(userRef, { group: targetGroupValue });
+
+                // 기본 그룹이 아닌 경우 calorieGroups 컬렉션에 추가
+                if (!targetGroupForAddingUser.isDefault) {
+                  const groupUserRef = doc(db, 'calorieGroups', targetGroupForAddingUser.id, 'users', user.key);
+                  const userData = users.find(u => u.key === user.key);
+                  batch.set(groupUserRef, {
+                    email: user.key,
+                    uid: userData?.uid,
+                    addedAt: new Date(),
+                    addedBy: 'admin'
+                  });
+                }
+            } else if (!shouldBeInGroup && currentGroupValue === targetGroupValue) {
+                // 그룹에서 제거해야 하는 경우 (기본 그룹으로 이동)
+                const userRef = doc(db, 'users', user.key);
+                batch.update(userRef, { group: DEFAULT_GROUP_VALUE });
+
+                // 기본 그룹이 아닌 경우 calorieGroups 컬렉션에서 제거
+                if (!targetGroupForAddingUser.isDefault) {
+                  const groupUserRef = doc(db, 'calorieGroups', targetGroupForAddingUser.id, 'users', user.key);
+                  batch.delete(groupUserRef);
+                }
             }
         });
-        
+
         await batch.commit();
-        message.success(`${targetKeysForTransfer.length}명의 사용자가 '${targetGroupForAddingUser.name}' 그룹에 추가되었습니다.`);
+        message.success(`'${targetGroupForAddingUser.name}' 그룹 멤버십이 업데이트되었습니다.`);
         setIsAddUserModalVisible(false);
         setTargetGroupForAddingUser(null);
+        setTargetKeysForTransfer([]);
         await loadData();
     } catch (error) {
-        console.error('그룹에 사용자 추가 실패:', error);
-        message.error('그룹에 사용자를 추가하는 중 오류가 발생했습니다.');
+        console.error('그룹 멤버십 관리 실패:', error);
+        message.error('그룹 멤버십을 업데이트하는 중 오류가 발생했습니다.');
     } finally {
         setLoadingUsers(false);
     }
@@ -786,7 +799,7 @@ const CalorieAdminPage = () => {
                                handleOpenAddUserModal(group);
                              }}
                            >
-                             수동 선택
+                             수동 관리
                            </Button>
                            <Button 
                              icon={<Shuffle size={14} />} 
@@ -979,6 +992,11 @@ const CalorieAdminPage = () => {
           return <Text type="secondary">-</Text>;
         }
         
+        // 단식 체크 확인 (flag === 2)
+        if (mealData.flag === 2) {
+          return <Tag color="#faad14" style={{ color: 'white' }}>단식</Tag>;
+        }
+        
         // 데이터 추출 로직 (기존과 동일)
         let estimatedCalories = null;
         let actualCalories = null;
@@ -999,7 +1017,7 @@ const CalorieAdminPage = () => {
           }
         }
         
-        if (estimatedCalories === null || actualCalories === null) {
+        if (estimatedCalories === null || actualCalories === null || isNaN(estimatedCalories) || isNaN(actualCalories)) {
           return <Text type="secondary">-</Text>;
         }
         
@@ -1040,6 +1058,11 @@ const CalorieAdminPage = () => {
         const foodData = record.foodDocForSelectedDate;
         const mealData = foodData ? foodData[selectedMealType] : null;
         
+        // 단식 체크 확인 (flag === 2)
+        if (mealData && mealData.flag === 2) {
+          return <Text type="secondary">단식</Text>;
+        }
+        
         // 새로운 데이터 구조와 기존 데이터 구조 모두 지원
         let estimatedCalories = null;
         let actualCalories = null;
@@ -1060,7 +1083,7 @@ const CalorieAdminPage = () => {
           }
         }
         
-        if (!mealData || estimatedCalories === null || actualCalories === null) {
+        if (!mealData || estimatedCalories === null || actualCalories === null || isNaN(estimatedCalories) || isNaN(actualCalories)) {
             return <Text type="secondary">기록 없음</Text>;
         }
         
@@ -1072,7 +1095,7 @@ const CalorieAdminPage = () => {
                 <Text>예:{estimatedCalories} / 실:{actualCalories}</Text>
                 <Space>
                    <Tooltip title={`원본차(${originalDifference})`}><Text style={{ color: originalDifference > 0 ? '#ff4d4f' : originalDifference < 0 ? '#1677ff' : 'inherit' }}>({originalDifference>0?'+':''}{originalDifference})</Text></Tooltip>
-                   {appliedDeviation !== null && (<Tooltip title={`적용편차(${appliedDeviation})`}><Text strong style={{ color: finalDifference > 0 ? '#ff4d4f' : finalDifference < 0 ? '#1677ff' : 'inherit' }}>→{finalDifference>0?'+':''}{finalDifference}</Text></Tooltip>)}
+                   {appliedDeviation !== null && appliedDeviation !== 0 && (<Tooltip title={`적용편차(${appliedDeviation})`}><Text strong style={{ color: finalDifference > 0 ? '#ff4d4f' : finalDifference < 0 ? '#1677ff' : 'inherit' }}>→{finalDifference>0?'+':''}{finalDifference}</Text></Tooltip>)}
                 </Space>
              </Space>
         );
@@ -1081,16 +1104,23 @@ const CalorieAdminPage = () => {
         const aData = a.foodDocForSelectedDate?.[selectedMealType];
         const bData = b.foodDocForSelectedDate?.[selectedMealType];
         
-        const aHasData = aData && 
-          ((aData.originalCalories?.actual !== undefined && aData.originalCalories?.estimated !== undefined) ||
-           (aData.estimatedCalories !== undefined && aData.actualCalories !== undefined));
-        const bHasData = bData && 
-          ((bData.originalCalories?.actual !== undefined && bData.originalCalories?.estimated !== undefined) ||
-           (bData.estimatedCalories !== undefined && bData.actualCalories !== undefined));
+        // 우선순위 함수: 낮은 숫자가 높은 우선순위
+        const getPriority = (data) => {
+          if (!data) return 3; // 기록 없음
+          if (data.flag === 2) return 2; // 단식
+          
+          // 칼로리 데이터 확인
+          const hasCalories = data.originalCalories 
+            ? (data.originalCalories.actual !== undefined && data.originalCalories.estimated !== undefined && !isNaN(data.originalCalories.actual) && !isNaN(data.originalCalories.estimated))
+            : (data.estimatedCalories !== undefined && data.actualCalories !== undefined && !isNaN(data.estimatedCalories) && !isNaN(data.actualCalories));
+          
+          return hasCalories ? 1 : 3; // 식사 기록 또는 기록 없음
+        };
         
-        if (aHasData && !bHasData) return -1;
-        if (!aHasData && bHasData) return 1;
-        return 0;
+        const aPriority = getPriority(aData);
+        const bPriority = getPriority(bData);
+        
+        return aPriority - bPriority;
       }
     },
     {
@@ -1172,6 +1202,11 @@ const CalorieAdminPage = () => {
                      {(() => {
                         const mealData = r.foodDocForSelectedDate[selectedMealType];
                         
+                        // 단식 체크 확인 (flag === 2)
+                        if (mealData && mealData.flag === 2) {
+                          return <Text type="secondary">단식</Text>;
+                        }
+                        
                         // 새로운 데이터 구조와 기존 데이터 구조 모두 지원
                         let estimatedCalories = null;
                         let actualCalories = null;
@@ -1192,7 +1227,7 @@ const CalorieAdminPage = () => {
                           }
                         }
                         
-                        if (mealData && estimatedCalories !== null && actualCalories !== null) {
+                        if (mealData && estimatedCalories !== null && actualCalories !== null && !isNaN(estimatedCalories) && !isNaN(actualCalories)) {
                             const originalDifference = actualCalories - estimatedCalories;
                             const finalDifference = appliedDeviation ?? originalDifference;
                             return (
@@ -1862,8 +1897,8 @@ const CalorieAdminPage = () => {
            </Form>
        </Modal>
 
-       <Modal title={<Text style={{ fontSize: '16px', fontWeight: '600' }}>'{targetGroupForAddingUser?.name}' 그룹 사용자 추가</Text>} open={isAddUserModalVisible} onCancel={() => setIsAddUserModalVisible(false)} onOk={handleAddUsersToGroup} okText="추가" cancelText="취소" width={isMobile ? '95%' : 680} destroyOnClose bodyStyle={{ height: isMobile ? '50vh' : 350, overflowY: 'auto' }}>
-            {targetGroupForAddingUser && ( <Transfer dataSource={getTransferDataSource()} showSearch filterOption={(i, o) => o.title.toLowerCase().includes(i.toLowerCase())} targetKeys={targetKeysForTransfer} onChange={handleTransferChange} render={item => item.title} listStyle={{ width: isMobile ? '45%' : 280, height: isMobile ? 280 : 300 }} titles={['전체', '추가']} locale={{ itemUnit: '명', itemsUnit: '명', searchPlaceholder: '검색' }}/> )}
+       <Modal title={<Text style={{ fontSize: '16px', fontWeight: '600' }}>'{targetGroupForAddingUser?.name}' 그룹 사용자 관리</Text>} open={isAddUserModalVisible} onCancel={() => setIsAddUserModalVisible(false)} onOk={handleManageGroupMembership} okText="저장" cancelText="취소" width={isMobile ? '95%' : 680} destroyOnClose bodyStyle={{ height: isMobile ? '50vh' : 350, overflowY: 'auto' }}>
+            {targetGroupForAddingUser && ( <Transfer dataSource={getTransferDataSource()} showSearch filterOption={(i, o) => o.title.toLowerCase().includes(i.toLowerCase())} targetKeys={targetKeysForTransfer} onChange={handleTransferChange} render={item => item.title} listStyle={{ width: isMobile ? '45%' : 280, height: isMobile ? 280 : 300 }} titles={['전체 사용자', '그룹 멤버']} locale={{ itemUnit: '명', itemsUnit: '명', searchPlaceholder: '검색' }}/> )}
         </Modal>
         
         <Modal 
