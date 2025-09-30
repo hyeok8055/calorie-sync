@@ -49,6 +49,12 @@ export const useModal = (testMode = false) => {
     if (!dataSource || !dataSource[mealType]) return null;
     
     const meal = dataSource[mealType];
+    
+    // 단식 체크 확인 (flag === 2)
+    if (meal.flag === 2) {
+      return 'fasting';
+    }
+    
     // originalCalories의 estimated 또는 actual이 null 또는 undefined이면 계산 불가
     const estimatedCalories = meal.originalCalories?.estimated;
     const actualCalories = meal.originalCalories?.actual;
@@ -96,6 +102,29 @@ export const useModal = (testMode = false) => {
     
     // 실제 데이터 확인
     const difference = calculateCalorieDifference(mealType);
+    
+    // 단식인 경우 특별 메시지 표시
+    if (difference === 'fasting') {
+      Modal.alert({
+        title: `${isAutoShow ? '🔔 ' : ''}${mealType === 'dinner' ? '어제' : '지난'} ${
+          mealType === 'breakfast' ? '아침' : 
+          mealType === 'lunch' ? '점심' : '저녁'
+        } 식사 결과`,
+        content: (
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+            <Text style={{ fontSize: '18px', color: '#666', fontWeight: '500' }}>
+              지난 식사를 하지 않았습니다.
+            </Text>
+          </div>
+        ),
+        confirmText: '확인',
+        onConfirm: () => {
+          // 모달을 확인하면 해당 식사를 조회한 것으로 표시
+          markMealAsViewed(mealType);
+        }
+      });
+      return;
+    }
     
     // 차이가 null이면 기본 메시지 표시
     if (difference === null) {
@@ -252,11 +281,14 @@ export const useModal = (testMode = false) => {
     // 현재 시간대에 조회 가능한 식사가 있는지 먼저 확인
     if (allowedMealType) {
       const meal = foodData[allowedMealType];
-      const hasData = meal && 
-        meal.originalCalories?.actual !== undefined && 
-        meal.originalCalories?.actual !== null &&
-        meal.originalCalories?.estimated !== undefined && 
-        meal.originalCalories?.estimated !== null;
+      // 식사 데이터가 있거나 단식인 경우
+      const hasData = meal && (
+        (meal.originalCalories?.actual !== undefined && 
+         meal.originalCalories?.actual !== null &&
+         meal.originalCalories?.estimated !== undefined && 
+         meal.originalCalories?.estimated !== null) ||
+        meal.flag === 2 // 단식인 경우도 포함
+      );
       
       const notViewed = !viewedMeals[allowedMealType];
       
@@ -278,11 +310,14 @@ export const useModal = (testMode = false) => {
       // 저녁 식사는 어제 데이터를 사용, 나머지는 오늘 데이터 사용
       const dataSource = mealType === 'dinner' ? yesterdayFoodData : foodData;
       const meal = dataSource?.[mealType];
-      const hasData = meal && 
-        meal.originalCalories?.actual !== undefined && 
-        meal.originalCalories?.actual !== null &&
-        meal.originalCalories?.estimated !== undefined && 
-        meal.originalCalories?.estimated !== null;
+      // 식사 데이터가 있거나 단식인 경우
+      const hasData = meal && (
+        (meal.originalCalories?.actual !== undefined && 
+         meal.originalCalories?.actual !== null &&
+         meal.originalCalories?.estimated !== undefined && 
+         meal.originalCalories?.estimated !== null) ||
+        meal.flag === 2 // 단식인 경우도 포함
+      );
       
       const notViewed = !viewedMeals[mealType];
       
@@ -328,9 +363,12 @@ export const useModal = (testMode = false) => {
     // 해당 시간대에 표시할 식사 데이터가 있는지 확인
     // 저녁 식사는 어제 데이터를 사용, 나머지는 오늘 데이터 사용
     const dataSource = mealType === 'dinner' ? yesterdayFoodData : foodData;
-    const hasData = mealType && dataSource?.[mealType] && 
-      (dataSource[mealType].originalCalories?.actual !== undefined && 
-       dataSource[mealType].originalCalories?.estimated !== undefined);
+    const meal = dataSource?.[mealType];
+    const hasData = mealType && meal && (
+      (meal.originalCalories?.actual !== undefined && 
+       meal.originalCalories?.estimated !== undefined) ||
+      meal.flag === 2 // 단식인 경우도 포함
+    );
 
     return { 
       available: hasData, 
