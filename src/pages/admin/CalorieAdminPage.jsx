@@ -1696,6 +1696,138 @@ const CalorieAdminPage = () => {
   // 기존 함수명 호환성을 위한 별칭
   const applyGroupCalorieBias = handleApplyGroupDeviation;
 
+
+  // 날짜별 그룹 멤버십 복구 함수 (식사 데이터 읽기 전용)
+  const handleRecoverGroupMembership = async () => {
+    const dateString = selectedDate.format('YYYY-MM-DD');
+
+    confirm({
+      title: `${dateString} 그룹 멤버십 복구`,
+      icon: <ExclamationCircleOutlined />,
+      content: (
+        <div>
+          <p>선택한 날짜의 식사 데이터에서 그룹 정보를 읽어 멤버십을 복구합니다.</p>
+          <p><strong>주의: 식사 데이터는 수정되지 않습니다 (읽기 전용)</strong></p>
+        </div>
+      ),
+      okText: '복구 시작',
+      okType: 'primary',
+      cancelText: '취소',
+      onOk: async () => {
+        try {
+          setLoadingUsers(true);
+          message.info('그룹 멤버십 복구를 시작합니다...');
+
+          const usersCollection = collection(db, 'users');
+          const usersSnapshot = await getDocs(usersCollection);
+
+          console.log(`총 ${usersSnapshot.size}명의 사용자 검색 중...`);
+
+          const groupMembershipMap = new Map();
+
+          for (const userDoc of usersSnapshot.docs) {
+            const userEmail = userDoc.id;
+
+            try {
+              const foodDocRef = doc(db, `users/${userEmail}/foods`, dateString);
+              const foodDocSnap = await getDoc(foodDocRef);
+
+              if (!foodDocSnap.exists()) continue;
+
+              const foodData = foodDocSnap.data();
+
+              for (const mealType of ['breakfast', 'lunch', 'dinner', 'snacks']) {
+                const mealData = foodData[mealType];
+
+                if (mealData?.groupDeviationConfig?.groupId) {
+                  const groupId = mealData.groupDeviationConfig.groupId;
+
+                  if (!groupMembershipMap.has(groupId)) {
+                    groupMembershipMap.set(groupId, { userEmails: [] });
+                  }
+
+                  const groupInfo = groupMembershipMap.get(groupId);
+                  if (!groupInfo.userEmails.includes(userEmail)) {
+                    groupInfo.userEmails.push(userEmail);
+                  }
+
+                  console.log(`✓ ${userEmail} -> 그룹 ${groupId} (${mealType})`);
+                  break;
+                }
+              }
+            } catch (error) {
+              console.error(`${userEmail} 처리 실패:`, error.message);
+            }
+          }
+
+          if (groupMembershipMap.size === 0) {
+            message.warning(`${dateString}에 그룹 편차가 적용된 사용자가 없습니다.`);
+            setLoadingUsers(false);
+            return;
+          }
+
+          console.log(`발견된 그룹: ${groupMembershipMap.size}개`);
+
+          let totalRecoveredUsers = 0;
+          let totalRecoveredGroups = 0;
+
+          for (const [groupId, groupInfo] of groupMembershipMap.entries()) {
+            try {
+              const groupDocRef = doc(db, 'calorieGroups', groupId);
+              const groupDocSnap = await getDoc(groupDocRef);
+
+              if (!groupDocSnap.exists()) {
+                console.error(`그룹 ${groupId}를 찾을 수 없습니다.`);
+                continue;
+              }
+
+              const groupData = groupDocSnap.data();
+              const groupName = groupData.name;
+
+              console.log(`그룹 복구 중: ${groupName} (${groupId})`);
+              console.log(`  - ${groupInfo.userEmails.length}명의 멤버 복구`);
+
+              const batch = writeBatch(db);
+
+              for (const userEmail of groupInfo.userEmails) {
+                const userRef = doc(db, 'users', userEmail);
+                batch.update(userRef, {
+                  [`groupsByDate.${dateString}`]: groupName
+                });
+
+                const groupUserRef = doc(db, 'calorieGroups', groupId, 'users', userEmail);
+                batch.set(groupUserRef, {
+                  email: userEmail,
+                  addedAt: new Date(),
+                  addedBy: 'recovery-button',
+                  recoveredFrom: 'foodData'
+                }, { merge: true });
+
+                console.log(`  ✓ ${userEmail} -> ${groupName}`);
+              }
+
+              await batch.commit();
+              totalRecoveredUsers += groupInfo.userEmails.length;
+              totalRecoveredGroups++;
+
+              console.log(`✓ ${groupName} 복구 완료 (${groupInfo.userEmails.length}명)`);
+            } catch (error) {
+              console.error(`그룹 ${groupId} 복구 실패:`, error.message);
+            }
+          }
+
+          message.success(`복구 완료! 그룹 ${totalRecoveredGroups}개, 멤버 ${totalRecoveredUsers}명`);
+          await loadData();
+
+        } catch (error) {
+          console.error('그룹 멤버십 복구 실패:', error);
+          message.error('그룹 멤버십 복구에 실패했습니다.');
+        } finally {
+          setLoadingUsers(false);
+        }
+      }
+    });
+  };
   return (
     <div style={{ padding: isMobile ? '8px' : '20px' }}>
       <Row justify="space-between" align="middle" style={{ marginBottom: 16, padding: isMobile ? '0 8px' : 0 }}>
@@ -1710,7 +1842,10 @@ const CalorieAdminPage = () => {
             />
           </Tooltip>
         </Space>
-        <Button onClick={loadData} icon={<SyncOutlined />} loading={loadingGroups || loadingUsers}>새로고침</Button>
+        <Space>
+          <Button onClick={handleRecoverGroupMembership} type="dashed" danger icon={<SyncOutlined />}>그룹 복구</Button>
+          <Button onClick={loadData} icon={<SyncOutlined />} loading={loadingGroups || loadingUsers}>새로고침</Button>
+        </Space>
       </Row>
       
       {showHelp && (

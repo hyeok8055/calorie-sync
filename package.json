@@ -7,7 +7,8 @@
     "dev": "vite --host",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "recover-groups": "node scripts/recoverGroupMembership.js"
   },
   "dependencies": {
     "@ant-design/colors": "^7.1.0",
