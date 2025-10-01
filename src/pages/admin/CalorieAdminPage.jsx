@@ -126,18 +126,49 @@ const CalorieAdminPage = () => {
     }
   }, [user, navigate]);
 
-  // 그룹 데이터 로드 함수
-  const fetchGroups = useCallback(async () => {
+  // 그룹 데이터 로드 함수 (날짜별 필터링)
+  const fetchGroups = useCallback(async (date) => {
     setLoadingGroups(true);
     try {
       const groupsCollection = collection(db, 'calorieGroups');
       const groupsSnapshot = await getDocs(groupsCollection);
-      const groupsData = groupsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        key: doc.data().name || doc.id,
-        ...doc.data()
-      }));
-      
+      const dateString = date.format('YYYY-MM-DD');
+
+      // 선택된 날짜에 해당하는 그룹만 필터링하고, 멤버 수 조회
+      const groupsDataPromises = groupsSnapshot.docs
+        .map(async (doc) => {
+          const groupData = doc.data();
+          const groupId = doc.id;
+
+          // 기본 그룹이 아닌 경우 날짜 필터링
+          if (groupId !== DEFAULT_GROUP_ID) {
+            if (!groupData.applicableDate) return null;
+            const groupDate = dayjs(groupData.applicableDate.toDate()).format('YYYY-MM-DD');
+            if (groupDate !== dateString) return null;
+          }
+
+          // users 서브컬렉션에서 실제 멤버 목록 조회
+          let memberEmails = [];
+          try {
+            const usersSubCollection = collection(db, 'calorieGroups', groupId, 'users');
+            const usersSnapshot = await getDocs(usersSubCollection);
+            memberEmails = usersSnapshot.docs.map(doc => doc.id); // 이메일 목록
+          } catch (error) {
+            console.error(`그룹 ${groupId} 멤버 조회 실패:`, error);
+          }
+
+          return {
+            id: groupId,
+            key: groupData.name || groupId,
+            memberEmails: memberEmails, // 실제 서브컬렉션 기반 멤버 이메일 목록
+            memberCount: memberEmails.length, // 멤버 수
+            ...groupData
+          };
+        });
+
+      const groupsDataResolved = await Promise.all(groupsDataPromises);
+      const groupsData = groupsDataResolved.filter(g => g !== null);
+
       // 기본 그룹이 없는 경우 생성 또는 확인
       let defaultGroupExists = groupsData.some(g => g.id === DEFAULT_GROUP_ID);
       if (!defaultGroupExists) {
@@ -180,18 +211,17 @@ const CalorieAdminPage = () => {
       const usersDataPromises = usersSnapshot.docs.map(async (userDoc) => {
         const userData = userDoc.data();
         const userEmail = userDoc.id; // document ID는 이제 email
-        let userGroupValue = userData.group === undefined ? DEFAULT_GROUP_VALUE : userData.group;
 
-        const isValidGroup = userGroupValue === DEFAULT_GROUP_VALUE || loadedGroups.some(g => g.name === userGroupValue && !g.isDefault);
+        // 날짜별 그룹 시스템: groupsByDate 맵에서 해당 날짜의 그룹 조회
+        const groupsByDate = userData.groupsByDate || {};
+        let userGroupValue = groupsByDate[dateString] || userData.group || DEFAULT_GROUP_VALUE;
 
-        if (!isValidGroup) {
-            userGroupValue = DEFAULT_GROUP_VALUE;
-            try {
-              await updateDoc(doc(db, 'users', userEmail), { group: DEFAULT_GROUP_VALUE });
-            } catch (updateError) {
-              console.error(`사용자 ${userEmail} 그룹 기본값 업데이트 실패:`, updateError);
-            }
-        }
+        // 현재 날짜에 유효한 그룹인지 확인 (UI 표시용)
+        const isValidGroup = userGroupValue === DEFAULT_GROUP_VALUE ||
+          loadedGroups.some(g => g.name === userGroupValue && !g.isDefault);
+
+        // UI 표시용: 유효하지 않은 그룹이면 기본 그룹으로 표시
+        const displayGroupValue = isValidGroup ? userGroupValue : DEFAULT_GROUP_VALUE;
 
         const calorieBias = userData.calorieBias !== undefined ? userData.calorieBias : 0;
 
@@ -217,7 +247,7 @@ const CalorieAdminPage = () => {
           height: userData.height || '-',
           weight: userData.weight || '-',
           goal: userData.goal || '-',
-          group: userGroupValue,
+          group: displayGroupValue, // UI 표시용 그룹값 사용
           calorieBias: calorieBias,
           foodDocForSelectedDate: foodDocForSelectedDate,
         };
@@ -238,8 +268,7 @@ const CalorieAdminPage = () => {
   const loadData = useCallback(async () => {
     setLoadingGroups(true);
     setLoadingUsers(true); // 사용자 로딩도 시작으로 표시
-    const groupsPromise = fetchGroups();
-    const loadedGroups = await groupsPromise;
+    const loadedGroups = await fetchGroups(selectedDate); // selectedDate 전달
     if (loadedGroups.length > 0) {
         await fetchUsers(loadedGroups, selectedDate); // selectedDate 전달
     }
@@ -325,7 +354,7 @@ const CalorieAdminPage = () => {
           }
           setIsGroupEditModalVisible(false);
           setEditingGroup(null);
-          await fetchGroups();
+          await fetchGroups(selectedDate);
       } catch (error) {
           console.error('그룹 저장 실패:', error);
           message.error('그룹 저장에 실패했습니다.');
@@ -466,22 +495,26 @@ const CalorieAdminPage = () => {
   // 사용자 설정 저장
   const handleSaveUserSettings = async (values) => {
     if (!currentUser) return;
-    
+
     // 그룹 유효성 검사
-    const isValidGroup = values.group === DEFAULT_GROUP_VALUE || 
+    const isValidGroup = values.group === DEFAULT_GROUP_VALUE ||
                         groups.some(g => g.name === values.group && !g.isDefault);
-    
+
     if (!isValidGroup) {
       message.error('유효하지 않은 그룹입니다. 기본 그룹으로 설정됩니다.');
       values.group = DEFAULT_GROUP_VALUE;
     }
-    
+
     try {
       const userEmail = currentUser.key; // email 기반 식별자
       const userRef = doc(db, 'users', userEmail);
+      const dateString = selectedDate.format('YYYY-MM-DD');
+
+      // groupsByDate 업데이트 (날짜별 그룹 이력 저장)
       await updateDoc(userRef, {
-        group: values.group,
-        calorieBias: values.calorieBias
+        group: values.group, // 호환성을 위해 유지
+        calorieBias: values.calorieBias,
+        [`groupsByDate.${dateString}`]: values.group // 날짜별 그룹 저장
       });
 
       // 그룹이 변경된 경우 users 서브컬렉션 업데이트
@@ -595,28 +628,33 @@ const CalorieAdminPage = () => {
       message.warning('추가할 사용자를 선택하세요.');
       return;
     }
-    
+
     // 대상 그룹 유효성 검사
-    const isValidTargetGroup = targetGroupForAddingUser.isDefault || 
+    const isValidTargetGroup = targetGroupForAddingUser.isDefault ||
                               groups.some(g => g.id === targetGroupForAddingUser.id && !g.isDefault);
-    
+
     if (!isValidTargetGroup) {
       message.error('유효하지 않은 대상 그룹입니다.');
       return;
     }
-    
+
     const targetGroupValue = targetGroupForAddingUser.isDefault
       ? DEFAULT_GROUP_VALUE
       : targetGroupForAddingUser.name;
-      
+
     try {
       setLoadingUsers(true);
       const batch = writeBatch(db);
-      
+      const dateString = selectedDate.format('YYYY-MM-DD');
+
       targetKeysForTransfer.forEach(userEmail => {
         const userRef = doc(db, 'users', userEmail);
-        batch.update(userRef, { group: targetGroupValue });
-        
+        // groupsByDate 업데이트 추가
+        batch.update(userRef, {
+          group: targetGroupValue,
+          [`groupsByDate.${dateString}`]: targetGroupValue
+        });
+
         // calorieGroups/{그룹ID}/users/ 컬렉션에 사용자 email 저장
         if (!targetGroupForAddingUser.isDefault) {
           const groupUserRef = doc(db, 'calorieGroups', targetGroupForAddingUser.id, 'users', userEmail);
@@ -629,7 +667,7 @@ const CalorieAdminPage = () => {
           });
         }
       });
-      
+
       await batch.commit();
       message.success(`${targetKeysForTransfer.length}명의 사용자가 '${targetGroupForAddingUser.name}' 그룹에 추가되었습니다.`);
       setIsRandomUserModalVisible(false);
@@ -678,6 +716,7 @@ const CalorieAdminPage = () => {
     try {
         setLoadingUsers(true);
         const batch = writeBatch(db);
+        const dateString = selectedDate.format('YYYY-MM-DD');
 
         // 모든 사용자들을 순회하면서 그룹 멤버십 결정
         users.forEach(user => {
@@ -687,7 +726,11 @@ const CalorieAdminPage = () => {
             if (shouldBeInGroup && currentGroupValue !== targetGroupValue) {
                 // 그룹에 추가해야 하는 경우
                 const userRef = doc(db, 'users', user.key);
-                batch.update(userRef, { group: targetGroupValue });
+                // groupsByDate 업데이트 추가
+                batch.update(userRef, {
+                  group: targetGroupValue,
+                  [`groupsByDate.${dateString}`]: targetGroupValue
+                });
 
                 // 기본 그룹이 아닌 경우 calorieGroups 컬렉션에 추가
                 if (!targetGroupForAddingUser.isDefault) {
@@ -703,7 +746,11 @@ const CalorieAdminPage = () => {
             } else if (!shouldBeInGroup && currentGroupValue === targetGroupValue) {
                 // 그룹에서 제거해야 하는 경우 (기본 그룹으로 이동)
                 const userRef = doc(db, 'users', user.key);
-                batch.update(userRef, { group: DEFAULT_GROUP_VALUE });
+                // groupsByDate 업데이트 추가
+                batch.update(userRef, {
+                  group: DEFAULT_GROUP_VALUE,
+                  [`groupsByDate.${dateString}`]: DEFAULT_GROUP_VALUE
+                });
 
                 // 기본 그룹이 아닌 경우 calorieGroups 컬렉션에서 제거
                 if (!targetGroupForAddingUser.isDefault) {
@@ -729,12 +776,19 @@ const CalorieAdminPage = () => {
 
   // 그룹 정보를 표시하는 카드 컴포넌트
   const GroupCard = ({ group }) => {
-    
+
+    // 실제 서브컬렉션 기반 멤버 목록으로 필터링
     const groupUsers = users.filter(user => {
         if (group.isDefault) {
-            return user.group === DEFAULT_GROUP_VALUE;
+            // 기본 그룹: 어떤 그룹에도 속하지 않은 사용자들
+            return !groups.some(g =>
+                !g.isDefault &&
+                g.memberEmails &&
+                g.memberEmails.includes(user.email)
+            );
         } else {
-            return user.group === group.name;
+            // 일반 그룹: memberEmails에 포함된 사용자들
+            return group.memberEmails && group.memberEmails.includes(user.email);
         }
     });
     
@@ -937,7 +991,7 @@ const CalorieAdminPage = () => {
       key: 'group',
       width: 120,
       render: (groupValue, record) => {
-        // 선택된 날짜에 적용되는 그룹 찾기
+        // 선택된 날짜에 적용���는 그룹 찾기
         const applicableGroup = groups.find(g => {
           if (g.isDefault) return false;
           if (!g.applicableDate) return false;
