@@ -8,6 +8,12 @@ import { useSelector } from 'react-redux';
 import { db } from '@/firebaseconfig';
 import { doc, getDoc, collection, query, orderBy, limit, setDoc, getDocs } from 'firebase/firestore';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+// dayjs timezone 플러그인 활성화
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const { Text } = Typography;
 
@@ -33,8 +39,8 @@ const Weekly = () => {
 
   const updateTodayWeeklyData = async (currentBMR, todayFoodsData) => {
     if (!todayFoodsData) return;
-    
-    const today = dayjs().format('YYYY-MM-DD');
+
+    const today = dayjs().tz('Asia/Seoul').format('YYYY-MM-DD');
     const todayWeeklyRef = doc(db, 'users', email, 'weekly', today);
     
     // 총 칼로리 계산
@@ -105,7 +111,7 @@ const Weekly = () => {
         setRecommendedDailyCalories(currentBMR);
 
         // 오늘 날짜의 weekly 문서 확인
-        const today = dayjs().format('YYYY-MM-DD');
+        const today = dayjs().tz('Asia/Seoul').format('YYYY-MM-DD');
         const todayWeeklyRef = doc(db, 'users', email, 'weekly', today);
         const todayWeeklyDoc = await getDoc(todayWeeklyRef);
 
@@ -121,9 +127,9 @@ const Weekly = () => {
         }
 
         // 이번 주의 데이터 가져오기
-        const startOfWeek = dayjs().startOf('week');
+        const startOfWeek = dayjs().tz('Asia/Seoul').startOf('week');
         const weeklyData = [];
-        
+
         for (let i = 0; i < 7; i++) {
           const currentDate = startOfWeek.add(i, 'day').format('YYYY-MM-DD');
           const weeklyDocRef = doc(db, 'users', email, 'weekly', currentDate);

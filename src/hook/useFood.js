@@ -6,28 +6,48 @@ import { useSelector, useDispatch } from 'react-redux';
 import { updateMealFlag } from '@/redux/actions/mealActions';
 import useCalorieDeviation from './useCalorieDeviation';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+// dayjs timezone 플러그인 활성화
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const getTodayDate = () => {
-  return dayjs().format('YYYY-MM-DD');
+  // 한국 시간대(Asia/Seoul) 기준으로 오늘 날짜 계산
+  return dayjs().tz('Asia/Seoul').format('YYYY-MM-DD');
 };
 
 // 어제 날짜 가져오기 함수 추가
 const getYesterdayDate = () => {
-  return dayjs().subtract(1, 'day').format('YYYY-MM-DD');
+  // 한국 시간대(Asia/Seoul) 기준으로 어제 날짜 계산
+  return dayjs().tz('Asia/Seoul').subtract(1, 'day').format('YYYY-MM-DD');
 };
 
 // 시간대 기준으로 간식이 어느 식사에 포함되는지 결정 (요구사항 #1 반영)
+// 반환값: { mealType: 'breakfast'|'lunch'|'dinner', dateOffset: 0|-1 }
+// dateOffset: 0 = 오늘, -1 = 어제
 const getSnackMealType = () => {
-  const h = dayjs().hour();
-  const m = dayjs().minute();
+  // 한국 시간대(Asia/Seoul) 기준으로 현재 시간 가져오기
+  const now = dayjs().tz('Asia/Seoul');
+  const h = now.hour();
+  const m = now.minute();
   const total = h * 60 + m;
 
-  // 아침: 06:30 ~ 10:29
-  if (total >= (6 * 60 + 30) && total <= (10 * 60 + 29)) return 'breakfast';
-  // 점심: 10:30 ~ 16:29
-  if (total >= (10 * 60 + 30) && total <= (16 * 60 + 29)) return 'lunch';
-  // 저녁: 그 외 시간 (16:30 ~ 익일 06:29)
-  return 'dinner';
+  // 아침: 06:30 ~ 10:29 (오늘)
+  if (total >= (6 * 60 + 30) && total <= (10 * 60 + 29)) {
+    return { mealType: 'breakfast', dateOffset: 0 };
+  }
+  // 점심: 10:30 ~ 16:29 (오늘)
+  if (total >= (10 * 60 + 30) && total <= (16 * 60 + 29)) {
+    return { mealType: 'lunch', dateOffset: 0 };
+  }
+  // 저녁: 16:30 ~ 23:59 (오늘)
+  if (total >= (16 * 60 + 30) && total <= (23 * 60 + 59)) {
+    return { mealType: 'dinner', dateOffset: 0 };
+  }
+  // 저녁(새벽): 00:00 ~ 06:29 (어제 저녁)
+  return { mealType: 'dinner', dateOffset: -1 };
 };
 
 // 새로운 편차 계산 함수 (요구사항에 맞는 로직)
@@ -39,7 +59,7 @@ const calculateCalorieOffset = (estimatedCalories, actualCalories, groupSettings
     let difference = actualCalories - estimatedCalories;
     
     // 2. 그룹 적용 조건: 그룹 설정이 있고 오늘이 applicableDate인 경우 + mealType이 일치하는 경우
-    if (groupSettings && groupSettings.applicableDate && dayjs(groupSettings.applicableDate).isSame(dayjs(), 'day')) {
+    if (groupSettings && groupSettings.applicableDate && dayjs(groupSettings.applicableDate).isSame(dayjs().tz('Asia/Seoul'), 'day')) {
       // mealType이 설정되어 있고 현재 식사 타입과 일치하는 경우에만 적용
       if (groupSettings.mealType && currentMealType && groupSettings.mealType === currentMealType) {
         const { deviationMultiplier = 1, defaultDeviation = 0 } = groupSettings;
@@ -208,14 +228,27 @@ export const useFood = () => {
         console.error('email 또는 mealType이 없습니다:', { email, mealType });
         return;
       }
-      
+
       setLoading(true);
       try {
-        const today = getTodayDate();
-        const docRef = doc(db, 'users', email, 'foods', today);
+        // 간식의 경우 시간대에 따라 날짜와 식사 타입을 결정
+        let targetDate = getTodayDate();
+        let targetMealTypeForSnack = null;
+
+        if (mealType === 'snacks') {
+          const snackInfo = getSnackMealType();
+          targetMealTypeForSnack = snackInfo.mealType;
+
+          // 새벽 시간대(00:00~06:29)는 어제 저녁으로 간주
+          if (snackInfo.dateOffset === -1) {
+            targetDate = getYesterdayDate();
+          }
+        }
+
+        const docRef = doc(db, 'users', email, 'foods', targetDate);
         const docSnap = await getDoc(docRef);
-        
-        let currentData = docSnap.exists() ? docSnap.data() : { date: today };
+
+        let currentData = docSnap.exists() ? docSnap.data() : { date: targetDate };
 
         // 데이터 유효성 검사 및 기본값 설정
         const validFoods = (foods || []).map(food => ({
@@ -244,7 +277,7 @@ export const useFood = () => {
 
             // 기존 저장된 설정 확인
             const existingConfig = currentData[mealType]?.groupDeviationConfig;
-            const hasExistingConfig = existingConfig && dayjs(existingConfig.appliedAt).isSame(dayjs(), 'day');
+            const hasExistingConfig = existingConfig && dayjs(existingConfig.appliedAt).isSame(dayjs().tz('Asia/Seoul'), 'day');
 
             // 우선순위 결정 로직
             if (currentGroupSettings && currentGroupSettings.applicableDate) {
@@ -275,7 +308,7 @@ export const useFood = () => {
             console.error('그룹 설정 조회 실패:', error);
             // 에러 발생 시 기존 저장된 설정으로 fallback
             const existingConfig = currentData[mealType]?.groupDeviationConfig;
-            if (existingConfig && dayjs(existingConfig.appliedAt).isSame(dayjs(), 'day')) {
+            if (existingConfig && dayjs(existingConfig.appliedAt).isSame(dayjs().tz('Asia/Seoul'), 'day')) {
               groupSettings = {
                 deviationMultiplier: existingConfig.deviationMultiplier,
                 defaultDeviation: existingConfig.defaultDeviation,
@@ -291,11 +324,11 @@ export const useFood = () => {
         const deviationSettings = await getDeviationSettings();
         
         if (mealType === 'snacks') {
-          // 간식인 경우 시간대에 따라 식사 타입 결정
-          const targetMealType = getSnackMealType();
-          
+          // 간식인 경우 시간대에 따라 식사 타입 결정 (이미 위에서 계산됨)
+          const actualTargetMealType = targetMealTypeForSnack;
+
           // 기존 식사 데이터 가져오기
-          const existingMeal = currentData[targetMealType] || {
+          const existingMeal = currentData[actualTargetMealType] || {
             flag: 0,
             foods: [],
             originalCalories: { estimated: 0, actual: 0 },
@@ -353,11 +386,11 @@ export const useFood = () => {
           const naturalDeviation = newMealActual && newMealEstimated ? newMealActual - newMealEstimated : 0;
           
           // 새로운 편차 계산 로직 적용 (간식 포함)
-          const calculatedOffset = newMealEstimated && newMealActual ? 
-            calculateCalorieOffset(newMealEstimated, newMealActual, groupSettings, personalBias, targetMealType) : 
+          const calculatedOffset = newMealEstimated && newMealActual ?
+            calculateCalorieOffset(newMealEstimated, newMealActual, groupSettings, personalBias, actualTargetMealType) :
             personalBias;
-          
-          currentData[targetMealType] = {
+
+          currentData[actualTargetMealType] = {
             ...existingMeal,
             flag: Number(existingMeal.flag),
             foods: [...existingMeal.foods, ...validFoods],
@@ -470,7 +503,7 @@ export const useFood = () => {
         
         // 식사 완료 시 Redux 상태 업데이트
         if (flag === 1) {
-          const targetMealType = mealType === 'snacks' ? getSnackMealType() : mealType;
+          const targetMealType = mealType === 'snacks' ? targetMealTypeForSnack : mealType;
           dispatch(updateMealFlag(targetMealType, 1));
         }
 
