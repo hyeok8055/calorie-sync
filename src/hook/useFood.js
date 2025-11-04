@@ -35,15 +35,15 @@ const getSnackMealType = () => {
   const total = h * 60 + m;
 
   // 아침: 06:30 ~ 10:29 (오늘)
-  if (total >= (6 * 60 + 30) && total <= (10 * 60 + 29)) {
+  if (total >= (6 * 60 + 30) && total < (10 * 60 + 30)) {
     return { mealType: 'breakfast', dateOffset: 0 };
   }
   // 점심: 10:30 ~ 16:29 (오늘)
-  if (total >= (10 * 60 + 30) && total <= (16 * 60 + 29)) {
+  if (total >= (10 * 60 + 30) && total < (16 * 60 + 30)) {
     return { mealType: 'lunch', dateOffset: 0 };
   }
   // 저녁: 16:30 ~ 23:59 (오늘)
-  if (total >= (16 * 60 + 30) && total <= (23 * 60 + 59)) {
+  if (total >= (16 * 60 + 30)) {
     return { mealType: 'dinner', dateOffset: 0 };
   }
   // 저녁(새벽): 00:00 ~ 06:29 (어제 저녁)
@@ -231,16 +231,29 @@ export const useFood = () => {
 
       setLoading(true);
       try {
-        // 간식의 경우 시간대에 따라 날짜와 식사 타입을 결정
+        // 시간대에 따라 날짜와 식사 타입을 결정
         let targetDate = getTodayDate();
         let targetMealTypeForSnack = null;
+        let adjustedMealType = mealType;
 
+        // 간식 또는 저녁 식사의 경우 시간대에 따라 날짜와 식사 타입을 결정
         if (mealType === 'snacks') {
           const snackInfo = getSnackMealType();
           targetMealTypeForSnack = snackInfo.mealType;
 
           // 새벽 시간대(00:00~06:29)는 어제 저녁으로 간주
           if (snackInfo.dateOffset === -1) {
+            targetDate = getYesterdayDate();
+          }
+        } else if (mealType === 'dinner') {
+          // 저녁 선택 시 현재 시간이 새벽(00:00~06:29)이면 어제 저녁으로 저장
+          const now = dayjs().tz('Asia/Seoul');
+          const h = now.hour();
+          const m = now.minute();
+          const total = h * 60 + m;
+          
+          // 새벽 시간대(00:00~06:29)는 어제로 이동
+          if (total < (6 * 60 + 30)) {
             targetDate = getYesterdayDate();
           }
         }
