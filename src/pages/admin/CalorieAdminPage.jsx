@@ -216,6 +216,24 @@ const CalorieAdminPage = () => {
         const groupsByDate = userData.groupsByDate || {};
         let userGroupValue = groupsByDate[dateString] || userData.group || DEFAULT_GROUP_VALUE;
 
+        // 실제 서브컬렉션에서 사용자가 속한 그룹을 확인
+        let actualGroupValue = DEFAULT_GROUP_VALUE;
+        let foundInGroup = null;
+        
+        // 각 그룹의 users 서브컬렉션을 확인하여 실제 소속 그룹 찾기
+        for (const group of loadedGroups) {
+          if (!group.isDefault && group.memberEmails && group.memberEmails.includes(userEmail)) {
+            actualGroupValue = group.name;
+            foundInGroup = group.name;
+            break;
+          }
+        }
+        
+        // 서브컬렉션 기반 실제 그룹값과 users 문서의 group 필드가 다르면 실제값 우선
+        if (actualGroupValue !== DEFAULT_GROUP_VALUE) {
+          userGroupValue = actualGroupValue;
+        }
+
         // 현재 날짜에 유효한 그룹인지 확인 (UI 표시용)
         const isValidGroup = userGroupValue === DEFAULT_GROUP_VALUE ||
           loadedGroups.some(g => g.name === userGroupValue && !g.isDefault);
@@ -254,8 +272,26 @@ const CalorieAdminPage = () => {
       });
 
       const usersData = await Promise.all(usersDataPromises);
-      setUsers(usersData);
-      setFilteredUsers(usersData);
+      
+      // 서브컬렉션에 속하지 않은 사용자들을 찾아서 기본 그룹으로 표시
+      const allGroupMemberEmails = new Set();
+      loadedGroups.forEach(group => {
+        if (!group.isDefault && group.memberEmails) {
+          group.memberEmails.forEach(email => allGroupMemberEmails.add(email));
+        }
+      });
+      
+      // 어떤 그룹에도 속하지 않은 사용자는 기본 그룹으로 재설정
+      const correctedUsersData = usersData.map(user => {
+        const isInAnyGroup = allGroupMemberEmails.has(user.email);
+        if (!isInAnyGroup && user.group !== DEFAULT_GROUP_VALUE) {
+          // console.log('⚠️ [fetchUsers] 그룹 재설정:', user.email, '기존:', user.group, '→ 기본 그룹');
+          return { ...user, group: DEFAULT_GROUP_VALUE };
+        }
+        return user;
+      });
+      setUsers(correctedUsersData);
+      setFilteredUsers(correctedUsersData);
     } catch (error) {
       console.error('사용자 정보 가져오기 실패:', error);
       message.error('사용자 정보를 불러오는데 실패했습니다.');
@@ -303,7 +339,10 @@ const CalorieAdminPage = () => {
     if (groupValue === 'all') {
       setFilteredUsers(users);
     } else {
-      const filtered = users.filter(user => user.group === groupValue);
+      const filtered = users.filter(user => {
+        const matches = user.group === groupValue;
+        return matches;
+      });
       setFilteredUsers(filtered);
     }
   };
@@ -445,7 +484,7 @@ const CalorieAdminPage = () => {
 
                     if (rollbackCount > 0) {
                       await rollbackBatch.commit();
-                      console.log(`${rollbackCount}개의 식사 데이터에서 그룹 편차 설정이 롤백되었습니다.`);
+                      // console.log(`${rollbackCount}개의 식사 데이터에서 그룹 편차 설정이 롤백되었습니다.`);
                     }
                   }
 
@@ -689,10 +728,19 @@ const CalorieAdminPage = () => {
         const currentGroupName = user.group === DEFAULT_GROUP_VALUE
             ? '기본 그룹'
             : (groups.find(g => g.name === user.group)?.name || user.group);
+        
+        // 그룹에 따라 다른 색상 태그 표시
+        const currentGroup = groups.find(g => g.name === user.group || (g.id === DEFAULT_GROUP_ID && user.group === DEFAULT_GROUP_VALUE));
+        const groupColor = currentGroup?.color || '#8c8c8c';
+        const isDefaultGroup = user.group === DEFAULT_GROUP_VALUE;
+        
         return {
             key: user.key,
             title: `${user.name} (${user.email})`,
-            description: `현재 그룹: ${currentGroupName}`
+            description: currentGroupName,
+            groupColor: groupColor,
+            isDefaultGroup: isDefaultGroup,
+            disabled: false // 모든 사용자 선택 가능
         };
     });
   };
@@ -1952,7 +2000,39 @@ const CalorieAdminPage = () => {
        </Modal>
 
        <Modal title={<Text style={{ fontSize: '16px', fontWeight: '600' }}>'{targetGroupForAddingUser?.name}' 그룹 사용자 관리</Text>} open={isAddUserModalVisible} onCancel={() => setIsAddUserModalVisible(false)} onOk={handleManageGroupMembership} okText="저장" cancelText="취소" width={isMobile ? '95%' : 680} destroyOnClose bodyStyle={{ height: isMobile ? '50vh' : 350, overflowY: 'auto' }}>
-            {targetGroupForAddingUser && ( <Transfer dataSource={getTransferDataSource()} showSearch filterOption={(i, o) => o.title.toLowerCase().includes(i.toLowerCase())} targetKeys={targetKeysForTransfer} onChange={handleTransferChange} render={item => item.title} listStyle={{ width: isMobile ? '45%' : 280, height: isMobile ? 280 : 300 }} titles={['전체 사용자', '그룹 멤버']} locale={{ itemUnit: '명', itemsUnit: '명', searchPlaceholder: '검색' }}/> )}
+            {targetGroupForAddingUser && ( 
+              <>
+                <Transfer 
+                  dataSource={getTransferDataSource()} 
+                  showSearch 
+                  filterOption={(inputValue, option) => 
+                    option.title.toLowerCase().includes(inputValue.toLowerCase()) ||
+                    option.description.toLowerCase().includes(inputValue.toLowerCase())
+                  }
+                  targetKeys={targetKeysForTransfer} 
+                  onChange={handleTransferChange} 
+                  render={item => (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div 
+                        style={{ 
+                          width: '8px', 
+                          height: '8px', 
+                          borderRadius: '50%', 
+                          backgroundColor: item.groupColor,
+                          flexShrink: 0
+                        }} 
+                      />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {item.title}
+                      </span>
+                    </div>
+                  )}
+                  listStyle={{ width: isMobile ? '45%' : 295, height: isMobile ? 280 : 300 }} 
+                  titles={['전체 사용자', '그룹 멤버']} 
+                  locale={{ itemUnit: '명', itemsUnit: '명', searchPlaceholder: '이름 또는 그룹 검색' }}
+                />
+              </>
+            )}
         </Modal>
         
         <Modal 
@@ -2092,7 +2172,13 @@ const CalorieAdminPage = () => {
                           const currentGroupName = record.group === DEFAULT_GROUP_VALUE
                             ? '기본 그룹'
                             : (groups.find(g => g.name === record.group)?.name || record.group);
-                          return currentGroupName;
+                          const currentGroup = groups.find(g => g.name === record.group || (g.id === DEFAULT_GROUP_ID && record.group === DEFAULT_GROUP_VALUE));
+                          const groupColor = currentGroup?.color || '#8c8c8c';
+                          return (
+                            <Tag color={groupColor}>
+                              {currentGroupName}
+                            </Tag>
+                          );
                         }
                       }
                     ]}
