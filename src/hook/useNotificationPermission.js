@@ -4,6 +4,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { messaging, getToken, db, setupForegroundHandler } from '../firebaseconfig'; // setupForegroundHandler 추가
 import { useDeviceInfo } from './useDeviceInfo'; // 디바이스 정보 훅
 import { setFcmToken } from '../redux/actions/authActions'; // Redux 액션
+import { logNotificationPermission } from '../utils/analytics';
 
 // VAPID 키 (환경 변수 등으로 관리하는 것이 더 안전합니다)
 const VAPID_KEY = "BBOl7JOGCasgyKCZv1Atq_5MdnvWAWk_iWleIggXfXN3aMGJeuKdEHSTp4OGUfmVPNHwnf5eCLQyY80ITKzz7qk";
@@ -152,6 +153,9 @@ export const useNotificationPermission = () => {
       
       setPermissionStatus(permission);
       setShowPermissionPrompt(false); // 요청 후 프롬프트 숨김
+
+      // Analytics: 알림 권한 이벤트
+      logNotificationPermission(permission === 'granted');
 
       if (permission === 'granted') {
         // console.log('[requestPermission] 권한 허용됨 - FCM 토큰 등록 시작');

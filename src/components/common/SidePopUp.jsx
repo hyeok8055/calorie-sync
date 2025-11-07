@@ -6,6 +6,7 @@ import { db } from '../../firebaseconfig';
 import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { useSurvey } from '../../hook/useSurvey';
+import { logProfileUpdate, logAdminAction } from '../../utils/analytics';
 import {
   UserOutline,
   EditSOutline,
@@ -85,6 +86,10 @@ const SidePopUp = ({ visible, onClose, onLogout, userName, email }) => {
 
       await updateDoc(userRef, finalValues);
       setUserInfo(finalValues); // 업데이트된 정보로 상태 변경
+      
+      // Analytics: 프로필 업데이트 이벤트
+      logProfileUpdate(finalValues);
+      
       setIsEditing(false);
       Toast.show({
         icon: <CheckCircleOutline />,
@@ -123,6 +128,10 @@ const SidePopUp = ({ visible, onClose, onLogout, userName, email }) => {
         result = await deactivateSurvey();
         if (result.success) {
           setSurveyStatus({ isActive: false, surveyId: null });
+          
+          // Analytics: 관리자 액션
+          logAdminAction('survey_deactivate', { surveyId: surveyStatus.surveyId });
+          
           Toast.show({
             icon: <CheckCircleOutline />,
             content: '설문조사가 종료되었습니다.',
@@ -140,6 +149,10 @@ const SidePopUp = ({ visible, onClose, onLogout, userName, email }) => {
         result = await activateSurvey();
         if (result.success) {
           setSurveyStatus({ isActive: true, surveyId: result.surveyId });
+          
+          // Analytics: 관리자 액션
+          logAdminAction('survey_activate', { surveyId: result.surveyId });
+          
           Toast.show({
             icon: <CheckCircleOutline />,
             content: '설문조사가 활성화되었습니다. 모든 사용자에게 알림이 전송됩니다.',

@@ -5,6 +5,7 @@ import { useSelector } from 'react-redux';
 import { db } from '../firebaseconfig';
 import { collection, addDoc, serverTimestamp, query, where, getDocs, setDoc, doc, getDoc } from 'firebase/firestore';
 import { useFood } from '../hook/useFood';
+import { logSurveyCompleteEvent, logPageView } from '../utils/analytics';
 
 const SurveyPage = () => {
   const navigate = useNavigate();
@@ -21,6 +22,9 @@ const SurveyPage = () => {
 
   // 점심 칼로리 편차 확인 제거 (Q6 폐지)
   useEffect(() => {
+    // Analytics: 페이지 뷰 로깅
+    logPageView('survey', '설문조사 페이지');
+    
     setLunchCalorieDifference(0);
   }, [foodData]);
 
@@ -108,6 +112,9 @@ const SurveyPage = () => {
 
       // 올바른 구조로 저장: surveys/{surveyId}/responses/{email}
       await setDoc(doc(db, 'surveys', surveyId, 'responses', email), surveyData);
+      
+      // Analytics: 설문조사 완료 이벤트
+      logSurveyCompleteEvent(values);
       
       Toast.show({
         content: '설문조사가 성공적으로 제출되었습니다!',

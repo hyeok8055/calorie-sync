@@ -7,6 +7,7 @@ import { useSelector } from 'react-redux';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/firebaseconfig';
 import { Result } from 'antd-mobile';
+import { logMealAddEvent, logPageView } from '@/utils/analytics';
 
 const getTodayDate = () => {
   const today = new Date();
@@ -37,6 +38,10 @@ const CaloriEntry = () => {
     const searchParams = new URLSearchParams(location.search);
     const items = searchParams.get('items');
     const type = searchParams.get('type');
+    
+    // Analytics: 페이지 뷰 로깅
+    logPageView('calorie_entry', '칼로리 입력 페이지');
+    
     if (items) {
       const foodNames = items.split(',');
       setSelectedFoodNames(foodNames);
@@ -129,6 +134,9 @@ const CaloriEntry = () => {
         selectedFoodNames,
         mealType !== 'snacks' ? 1 : 0 // 간식은 flag 값이 0
       );
+      
+      // Analytics: 식사 추가 이벤트
+      logMealAddEvent(mealType, mappedFoods.length, actualCaloriesTotal);
       
       setSaveSuccess(true);
       setLoading(false);

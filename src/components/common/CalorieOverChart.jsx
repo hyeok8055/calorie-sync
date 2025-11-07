@@ -1,9 +1,13 @@
 import { useEffect } from "react";
 import { Chart } from "@antv/g2";
+import { logChartView } from "../../utils/analytics";
 
 const CalorieOverChart = ({ data }) => {
   useEffect(() => {
     if (!data || data.length === 0) return;
+
+    // Analytics: 차트 조회 이벤트
+    logChartView('calorie_over_chart');
 
     // Initialize chart instance
     const chart = new Chart({

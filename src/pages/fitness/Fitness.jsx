@@ -5,6 +5,7 @@ import { PlusOutlined } from '@ant-design/icons';
 import { useSelector } from 'react-redux';
 import { useFitness } from '@/hook/useFitness';
 import BMICalculator from '@/components/common/BMICalculator';
+import { logPageView, logExerciseAdd, logExerciseDelete, logWeightRecord } from '@/utils/analytics';
 
 // 모든 운동 종목 리스트
 const sportsList = [
@@ -42,6 +43,11 @@ export default () => {
   const { fitnessData, uploadData, deleteData, loading, error } = useFitness(email);
   const [calendarData, setCalendarData] = useState({});
   const [forceUpdate, setForceUpdate] = useState(0);
+
+  // Analytics: 페이지 뷰
+  useEffect(() => {
+    logPageView('fitness', '건강 일지 페이지');
+  }, []);
 
   // 운동 종목 선택 관련 상태
   const [exercisePopupVisible, setExercisePopupVisible] = useState(false);
@@ -104,7 +110,14 @@ export default () => {
     }));
 
     try {
+      const hasPreviousData = fitnessData.length > 0;
       await uploadData(formattedDate, Number(weight), exercises);
+      
+      // Analytics: 체중 기록 및 운동 추가 이벤트
+      logWeightRecord(Number(weight), hasPreviousData);
+      exercises.forEach(ex => {
+        logExerciseAdd(ex.exercise, ex.duration);
+      });
       
       // 달력 데이터 업데이트
       setCalendarData(prevCalendarData => ({

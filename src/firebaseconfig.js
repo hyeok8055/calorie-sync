@@ -4,6 +4,7 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getDatabase } from "firebase/database";
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
+import { getAnalytics, isSupported } from "firebase/analytics";
 
 // Firebase configuration
 const firebaseConfig = {
@@ -23,6 +24,17 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const realtimeDb = getDatabase(app);
 const messaging = getMessaging(app);
+
+// Initialize Analytics (with support check for environments like localhost)
+let analytics = null;
+isSupported().then(yes => {
+  if (yes) {
+    analytics = getAnalytics(app);
+    console.log('Firebase Analytics initialized');
+  }
+}).catch(err => {
+  console.warn('Firebase Analytics not supported:', err);
+});
 
 // 포그라운드 메시지 핸들러 설정 함수
 export const setupForegroundHandler = () => {
@@ -70,5 +82,6 @@ export {
   realtimeDb, 
   messaging,
   getToken,
-  onMessage
+  onMessage,
+  analytics
 };

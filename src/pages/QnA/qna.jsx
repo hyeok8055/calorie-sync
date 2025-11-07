@@ -2,10 +2,17 @@ import React, { useState } from 'react';
 import { Collapse, SearchBar, Tabs } from 'antd-mobile';
 import './qna.css';
 import { Typography } from 'antd';
+import { logPageView } from '../../utils/analytics';
+
 const { Text } = Typography;
 
 const QnA = () => {
   const [searchText, setSearchText] = useState('');
+  
+  // Analytics: 페이지 뷰
+  React.useEffect(() => {
+    logPageView('qna', 'FAQ 페이지');
+  }, []);
   
   // QnA 데이터를 카테고리별로 구성
   const qnaCategories = {

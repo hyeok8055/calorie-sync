@@ -7,11 +7,17 @@ import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { useDispatch } from 'react-redux';
 import { setAuthStatus } from '../../redux/actions/authActions';
 import { doc, setDoc, serverTimestamp, getDoc } from "firebase/firestore";
+import { logLoginEvent, logSignUpEvent, logPageView } from '../../utils/analytics';
 
 const GoogleLogin = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // Analytics: 페이지 뷰
+    logPageView('google_login', '구글 로그인 페이지');
+  }, []);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -51,10 +57,12 @@ const GoogleLogin = () => {
       // Redux에 인증 상태 저장
       dispatch(setAuthStatus(serializedUser));
 
-      // 새 사용자면 인트로 페이지로, 기존 사용자면 메인 페이지로
+      // Analytics: 로그인 or 회원가입 이벤트
       if (!userDoc.exists()) {
+        logSignUpEvent('google');
         navigate('/intro');
       } else {
+        logLoginEvent('google');
         navigate('/main');
       }
     } catch (err) {

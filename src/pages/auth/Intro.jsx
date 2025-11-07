@@ -5,6 +5,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebaseconfig';
 import { useSelector, useDispatch } from 'react-redux';
 import { setAuthStatus } from '../../redux/actions/authActions';
+import { logPageView } from '../../utils/analytics';
 
 const { Option } = Select;
 
@@ -16,6 +17,11 @@ const Intro = () => {
   const [form] = Form.useForm();
   const [showCustomGoal, setShowCustomGoal] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Analytics: 페이지 뷰
+  React.useEffect(() => {
+    logPageView('intro', '초기 프로필 설정 페이지');
+  }, []);
 
   const onFinish = async (values) => {
     if (!email) {
@@ -50,6 +56,10 @@ const Intro = () => {
       };
       
       dispatch(setAuthStatus(updatedUserData));
+      
+      // Analytics: 프로필 설정 완료 이벤트
+      const { logProfileSetup } = await import('../../utils/analytics');
+      logProfileSetup(userData);
       
       // 성공 메시지 표시
       message.success('프로필 설정이 완료되었습니다!');

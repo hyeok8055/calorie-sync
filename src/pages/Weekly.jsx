@@ -10,6 +10,7 @@ import { doc, getDoc, collection, query, orderBy, limit, setDoc, getDocs } from 
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
+import { logWeeklyReportView, logPageView } from '@/utils/analytics';
 
 // dayjs timezone 플러그인 활성화
 dayjs.extend(utc);
@@ -80,6 +81,11 @@ const Weekly = () => {
   };
 
   useEffect(() => {
+    // Analytics: 페이지 뷰 및 주간 리포트 조회 이벤트
+    logPageView('weekly', '주간 리포트 페이지');
+    const weekNumber = dayjs().week();
+    logWeeklyReportView(weekNumber);
+    
     const fetchUserData = async () => {
       if (!email) return;
       setLoading(true);

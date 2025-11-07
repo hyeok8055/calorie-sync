@@ -5,6 +5,7 @@ import { doc, getDoc, setDoc, collection, query, where, getDocs, orderBy, limit 
 import { db } from '@/firebaseconfig';
 import { SettingOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import { logBMICalculation } from '../../utils/analytics';
 
 const { Title, Text } = Typography;
 
@@ -73,7 +74,20 @@ const BMICalculator = ({ weight: parentWeight }) => {
     if (h && w) {
       const bmiValue = parseFloat((w / (h / 100) ** 2).toFixed(2));
       setBMI(bmiValue);
+      
+      // Analytics: BMI 계산 이벤트
+      const category = getBMICategoryValue(bmiValue);
+      logBMICalculation(bmiValue, category);
     }
+  };
+  
+  // BMI 카테고리 값을 반환하는 헬퍼 함수
+  const getBMICategoryValue = (bmiValue) => {
+    if (bmiValue < 18.5) return "저체중";
+    if (bmiValue < 23) return "정상";
+    if (bmiValue < 25) return "과체중";
+    if (bmiValue < 30) return "비만";
+    return "고도비만";
   };
 
   const handleInputChange = async (value) => {

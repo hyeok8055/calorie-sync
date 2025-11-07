@@ -7,6 +7,7 @@ import {
   HeartFill,
   QuestionCircleOutline,
 } from 'antd-mobile-icons';
+import { logPageView } from '../utils/analytics';
 
 const Footer = () => {
   const navigate = useNavigate();
@@ -15,6 +16,17 @@ const Footer = () => {
 
   const setRouteActive = (value) => {
     navigate(value);
+    
+    // Analytics: 네비게이션 이벤트
+    const pageNames = {
+      '/main': '메인 페이지',
+      '/fitness': '건강 일지 페이지',
+      '/qna': 'FAQ 페이지'
+    };
+    
+    if (pageNames[value]) {
+      logPageView(value.replace('/', ''), pageNames[value]);
+    }
   };
 
   const tabs = [

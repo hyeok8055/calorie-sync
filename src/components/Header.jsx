@@ -7,6 +7,7 @@ import { auth } from '../firebaseconfig';
 import { useDispatch } from 'react-redux';
 import { clearAuthStatus } from '../redux/actions/authActions';
 import { signOut } from 'firebase/auth';
+import { logLogoutEvent } from '../utils/analytics';
 
 const Header = () => {
   const navigate = useNavigate();
@@ -33,6 +34,10 @@ const Header = () => {
     try {
       await signOut(auth);
       dispatch(clearAuthStatus());
+      
+      // Analytics: 로그아웃 이벤트
+      logLogoutEvent();
+      
       localStorage.setItem('isAuthenticated', 'false');
       navigate('/googlelogin');
     } catch (error) {

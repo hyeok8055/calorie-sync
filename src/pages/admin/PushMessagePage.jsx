@@ -5,6 +5,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { useMediaQuery } from 'react-responsive';
+import { logPageView, logAdminAction } from '../../utils/analytics';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -38,6 +39,9 @@ const PushMessagePage = () => {
 
   // 권한이 없는 경우 리다이렉트
   useEffect(() => {
+    // Analytics: 페이지 뷰
+    logPageView('admin_push_message', '관리자 푸시 알림 페이지');
+    
     if (!isAdmin) {
       message.error('관리자 권한이 필요합니다.');
       navigate('/');
@@ -73,6 +77,12 @@ const PushMessagePage = () => {
 
       message.success(`${type === 'custom' ? '커스텀' : type} 알림이 성공적으로 발송되었습니다!`);
       console.log('알림 발송 결과:', result.data);
+
+      // Analytics: 관리자 푸시 알림 발송 이벤트
+      logAdminAction('push_notification_sent', { 
+        notification_type: type,
+        has_custom_message: type === 'custom'
+      });
 
       // 커스텀 입력 초기화
       if (type === 'custom') {

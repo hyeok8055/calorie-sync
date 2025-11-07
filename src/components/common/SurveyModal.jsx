@@ -7,6 +7,7 @@ import { useSurvey } from '../../hook/useSurvey';
 import {
   CheckCircleOutline
 } from 'antd-mobile-icons';
+import { logSurveyStartEvent } from '../../utils/analytics';
 
 const SurveyModal = ({ visible, onClose, surveyId, email: propEmail }) => {
   const navigate = useNavigate();
@@ -48,6 +49,9 @@ const SurveyModal = ({ visible, onClose, surveyId, email: propEmail }) => {
   }, [email, checkGlobalSurveyStatus, checkUserSurveyCompletion]);
 
   const handleParticipate = () => {
+    // Analytics: 설문조사 시작 이벤트
+    logSurveyStartEvent();
+    
     // 자동 모달인 경우
     if (autoModalVisible) {
       setAutoModalVisible(false);

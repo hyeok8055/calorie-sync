@@ -4,6 +4,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebaseconfig';
 import { setAuthStatus, clearAuthStatus } from '../redux/actions/authActions';
+import { setAnalyticsUserId, setAnalyticsUserProperties, logLoginEvent } from '../utils/analytics';
 
 export const useAuth = () => {
   const dispatch = useDispatch();
@@ -33,6 +34,16 @@ export const useAuth = () => {
           
           dispatch(setAuthStatus(serializedUser));
           
+          // Analytics: 사용자 ID 및 속성 설정
+          setAnalyticsUserId(user.uid);
+          setAnalyticsUserProperties({
+            user_type: userData?.setupCompleted ? 'active' : 'new',
+            has_survey: !!userData?.surveyData
+          });
+          
+          // 로그인 이벤트 (처음 로그인 시에만)
+          logLoginEvent('google');
+          
         } catch (error) {
           console.error('Firestore 사용자 데이터 조회 실패:', error);
           
@@ -48,6 +59,8 @@ export const useAuth = () => {
         }
       } else {
         dispatch(clearAuthStatus());
+        // Analytics: 로그아웃 시 사용자 ID 초기화
+        setAnalyticsUserId(null);
       }
     });
 

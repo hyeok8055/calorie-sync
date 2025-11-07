@@ -10,6 +10,7 @@ import { setFoods } from '../../redux/actions/foodActions';
 import { auth } from '../../firebaseconfig';
 import { searchFoodNutrition as fetchFoodNutrition } from '../../api/api';
 import '../../styles/FoodList.css';
+import { logFoodSearchEvent, logFoodSelectEvent, logPageView } from '../../utils/analytics';
 
 const { Text } = Typography;
 
@@ -42,6 +43,9 @@ const Meal = () => {
   const lastSearchQueryRef = useRef('');
 
   useEffect(() => {
+    // Analytics: 페이지 뷰 로깅
+    logPageView('food_list', `음식 검색 페이지 - ${getMealTitle()}`);
+    
     const foodsRef = ref(realtimeDb, 'foods');
     const unsubscribe = onValue(foodsRef, (snapshot) => {
       const foodsData = snapshot.val();
@@ -148,6 +152,8 @@ const Meal = () => {
       setSelectedItems(selectedItems.filter(selectedItem => selectedItem !== item));
     } else {
       setSelectedItems([...selectedItems, item]);
+      // Analytics: 음식 선택 이벤트
+      logFoodSelectEvent(item.name, item.calories);
     }
   };
 
@@ -286,6 +292,8 @@ const Meal = () => {
       }
       // 즉시 검색 실행
       performSearch(trimmedValue);
+      // Analytics: 음식 검색 이벤트
+      logFoodSearchEvent(trimmedValue, 0); // 결과 개수는 performSearch에서 업데이트됨
     }
   };
 

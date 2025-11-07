@@ -7,6 +7,7 @@ import { useSelector } from 'react-redux';
 import { useNavigate } from "react-router-dom";
 import { useMediaQuery } from 'react-responsive';
 import { SyncOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { logPageView, logAdminAction } from '../../utils/analytics';
 
 const { Text, Title } = Typography;
 const { Search } = Input;
@@ -42,6 +43,9 @@ const AdminPage = () => {
 
   // 권한 체크
   useEffect(() => {
+    // Analytics: 페이지 뷰
+    logPageView('admin_food_management', '관리자 음식 관리 페이지');
+    
     if (!user || !ADMIN_EMAILS.includes(user.email)) {
       message.error('이 페이지에 접근할 권한이 없습니다.');
       navigate('/main');

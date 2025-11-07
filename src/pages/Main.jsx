@@ -13,6 +13,7 @@ import SurveyModal from '@/components/common/SurveyModal';
 import MealButton from '@/components/MealButton';
 import FastingSwitch from '@/components/FastingSwitch';
 import { CoffeeOutlined, FireOutlined, HistoryOutlined, FormOutlined } from '@ant-design/icons';
+import { logPageView } from '@/utils/analytics';
 
 const { Text, Title } = Typography;
 
@@ -135,6 +136,9 @@ const Main = () => {
 
   // 자동 모달 표시를 위한 useEffect
   useEffect(() => {
+    // Analytics: 페이지 뷰 로깅
+    logPageView('main', '메인 페이지');
+    
     const checkAndShowAutoModal = async () => {
       if (email && isAutoModalAvailable) {
         await showAutoModal();
