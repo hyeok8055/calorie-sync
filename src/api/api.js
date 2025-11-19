@@ -2,7 +2,7 @@ import { db } from '@/firebaseconfig';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
 // 백엔드 API URL 설정 (실제 환경에 맞게 조정 필요)
-const BACKEND_API_URL = 'https://wnln.mooo.com/api';
+const BACKEND_API_URL = 'https://kkukku.mooo.com/api';
 
 // 오늘 날짜를 YYYY-MM-DD 형식으로 반환
 const getTodayDate = () => {
